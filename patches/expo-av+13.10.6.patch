@@ -1,0 +1,19 @@
+diff --git a/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java b/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java
+index aad39a0..fcc7524 100644
+--- a/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java
++++ b/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java
+@@ -131,8 +131,12 @@ public class AVManager implements LifecycleEventListener, AudioManager.OnAudioFo
+         }
+       }
+     };
+-    mContext.registerReceiver(mNoisyAudioStreamReceiver,
+-      new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
++    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
++       mContext.registerReceiver(mNoisyAudioStreamReceiver, new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY), Context.RECEIVER_NOT_EXPORTED);
++    } else {
++        mContext.registerReceiver(mNoisyAudioStreamReceiver, new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
++    }
++
+     mIsRegistered = true;
+ 
+ 

@@ -1,0 +1,65 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+backend/
+
+# ===============================
+# ✅ 반드시 포함할 예외 파일/폴더
+# ===============================
+
+!node_modules/expo-dev-launcher/**
+!node_modules/expo-dev-menu/**
+
+
+# 프로젝트 설정 파일
+!constants/secrets.ts
+
+# Expo
+.expo/
+.expo-shared/
+dist/
+web-build/
+
+# Native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+.yarn/cache
+.yarn/install-state.gz
+
+# macOS
+.DS_Store
+
+# local env files
+.env
+.env.*
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# Sample or unused
+app-example
+
+# Native folders (recreated on prebuild)
+ios/
+
+# Editor
+.vscode/
+
+# Archives
+*.tar.gz

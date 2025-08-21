@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "SamSpeakEn",
+    "slug": "englishplay-ondevice",
+    "android": {
+      "package": "com.bruste68.englishplayondevice.play"
+    }
+  }
+}

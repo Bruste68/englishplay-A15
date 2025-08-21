@@ -1,0 +1,47 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "Node16",
+    "lib": ["dom", "esnext"],
+    "jsx": "react-native",
+    "moduleResolution": "node16",
+    "allowJs": true,
+    "skipLibCheck": true,
+    "noEmit": false,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "strict": true,
+    "baseUrl": "./",
+    "outDir": "./dist",
+    "paths": {
+      "@/*": ["app/*"],
+      "@components/*": ["components/*"],
+      "@constants/*": ["constants/*"],
+      "@hooks/*": ["hooks/*"],
+      "@utils/*": ["utils/*"],
+      "@context/*": ["context/*"]
+    },
+    "typeRoots": ["./node_modules/@types", "./@types"],
+    "types": ["jest"],
+  },
+  "include": [
+    "app",
+    "components",
+    "constants",
+    "context",
+    "hooks",
+    "services",
+    "shared",
+    "store",
+    "types",
+    "utils",
+    "**/*.ts", "**/*.tsx", "@types"
+  ],
+  "exclude": [
+    "node_modules",
+    "babel.config.js",
+    "metro.config.js"
+  ],
+  "extends": "expo/tsconfig.base"
+}
