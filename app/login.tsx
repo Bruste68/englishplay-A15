@@ -121,7 +121,17 @@ export default function LoginScreen() {
       vi: 'Mua gói Premium',
     },
   };
-  const getLocalized = (obj: Record<string, string>): string => obj[language] || obj['en'];
+ // const getLocalized = (obj: Record<string, string>): string => obj[language] || obj['en'];
+  const getLocalized = (obj: Record<string, string>): string => {
+    if (obj[language]) return obj[language];
+
+    // 중국어 계열은 모두 zh 로 매핑 (간체만 지원)
+    if (language.startsWith('zh')) {
+      if (obj['zh']) return obj['zh'];
+    }
+
+    return obj['en']; // 기본 영어 fallback
+  };
 
   /** ✅ 공용: 구매화면으로 강제 이동 */
   const goPurchase = (

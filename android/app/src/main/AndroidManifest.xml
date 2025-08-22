@@ -1,4 +1,7 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+  <!-- 권한 -->
   <uses-permission android:name="android.permission.INTERNET"/>
   <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
@@ -6,23 +9,70 @@
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
   <uses-permission android:name="android.permission.VIBRATE"/>
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <uses-permission android:name="com.android.vending.BILLING"/>
+  <!-- 광고 ID 권한 제거 (Play 정책 대응) -->
+  <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove"/>
+
+  <!-- SDK 설정 -->
+  <uses-sdk
+      android:minSdkVersion="24"
+      android:targetSdkVersion="35"
+      tools:overrideLibrary="
+          com.arthenica.ffmpegkit.reactnative,
+          com.facebook.react,
+          com.swmansion.reanimated,
+          expo.modules.core,
+          expo.modules.manifests
+      " />
+
+  <!-- Queries -->
   <queries>
+    <!-- IAP/스토어 접근 -->
+    <package android:name="com.android.vending" />
+    <!-- 외부 URL 브라우저 호출 -->
     <intent>
       <action android:name="android.intent.action.VIEW"/>
       <category android:name="android.intent.category.BROWSABLE"/>
       <data android:scheme="https"/>
     </intent>
   </queries>
-  <application android:name=".MainApplication" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="true" android:theme="@style/AppTheme" android:supportsRtl="true">
+
+  <!-- Application -->
+  <application
+      android:name=".MainApplication"
+      android:label="@string/app_name"
+      android:icon="@mipmap/ic_launcher"
+      android:roundIcon="@mipmap/ic_launcher_round"
+      android:allowBackup="false"
+      android:theme="@style/AppTheme"
+      android:usesCleartextTraffic="false"
+      android:supportsRtl="true">
+
+    <!-- Expo Updates -->
     <meta-data android:name="expo.modules.updates.ENABLED" android:value="false"/>
     <meta-data android:name="expo.modules.updates.EXPO_RUNTIME_VERSION" android:value="@string/expo_runtime_version"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="ALWAYS"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="0"/>
-    <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true" android:screenOrientation="portrait">
+
+    <!-- MainActivity -->
+    <activity
+        android:name=".MainActivity"
+        android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode"
+        android:launchMode="singleTask"
+        android:windowSoftInputMode="adjustResize"
+        android:theme="@style/Theme.App.SplashScreen"
+        android:exported="true"
+        android:screenOrientation="portrait">
+
+      <!-- 앱 런처 -->
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
         <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
+
+      <!-- 앱 내부 딥링크 -->
       <intent-filter>
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
@@ -30,6 +80,24 @@
         <data android:scheme="englishplayondevice"/>
         <data android:scheme="exp+englishplay-ondevice"/>
       </intent-filter>
+
+      <!-- OAuth 리다이렉트 (Google 로그인) -->
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="com.googleusercontent.apps.925681825495-v900v134g50u5dpd3rqvts8is3m9ifkl"
+              android:host="oauth2redirect"/>
+      </intent-filter>
     </activity>
+
+    <!-- 인앱결제 Billing Activity -->
+    <activity android:name="com.android.billingclient.api.ProxyBillingActivity"
+              android:exported="true"
+              tools:replace="android:exported"/>
+
+    <!-- React DevSettings (개발용) -->
+    <activity android:name="com.facebook.react.devsupport.DevSettingsActivity"
+              android:exported="false"/>
   </application>
 </manifest>
