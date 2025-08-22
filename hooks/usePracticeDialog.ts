@@ -309,6 +309,14 @@ export function usePracticeDialog(props: PracticeDialogHook) {
         } else {
            console.log('🔄 [RECURSE] Triggering next AI line');
            processDialogWithState();
+
+           // 🔥 릴리즈 꼬임 방지: 안전 재시도
+           setTimeout(() => {
+             if (dialogState.isActive && !dialogState.isSpeaking && !dialogState.isPaused) {
+               console.log("🔁 [SAFE RETRY] Retrying auto trigger");
+               processDialogWithState();
+             }
+           }, 150);
         }
       }
     } catch (err) {
@@ -383,21 +391,19 @@ export function usePracticeDialog(props: PracticeDialogHook) {
   };
 
   const handleUserResponse = () => {
-     if (!transcript || (!practiceMode && !isMemorizationMode) || !dialogState.isUserTurn) return;
+     if ((!transcript || transcript.trim() === "") && dialogState.isUserTurn) {
+       console.warn("⚠️ [USER] Empty transcript detected → Fallback to '...'");
+     }
 
+     const textToUse = transcript && transcript.trim() !== "" ? transcript : "...";
      const currentStep = dialogState.step;
 
-     // ✅ Whisper 결과를 localMessages에 저장
      const newUserMessage = {
        role: 'user',
-       text: transcript,
+       text: textToUse,
        timestamp: new Date().toISOString(),
        step: currentStep,
-       metadata: { 
-         audioFile: audioUri || '',
-         scene: sceneIndex,
-         step: currentStep
-       }
+       metadata: { audioFile: audioUri || '', scene: sceneIndex, step: currentStep }
      };
 
      setLocalMessages(prev => [...prev, newUserMessage]);

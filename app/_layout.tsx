@@ -8,7 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useCallback } from 'react';
 import { PersistentChatHistoryProvider } from '../context/PersistentChatHistoryContext';
 import * as Linking from 'expo-linking';
-import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import { activateKeepAwakeAsync, deactivateKeepAwakeAsync } from 'expo-keep-awake';
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -31,10 +31,7 @@ const linking = {
       'screens/TopicSelectScreen': 'screens/TopicSelectScreen',
     },
   },
-  getInitialURL: async () => {
-    const url = await Linking.getInitialURL();
-    return url;
-  },
+  getInitialURL: async () => Linking.getInitialURL(),
   subscribe: (listener: (url: string) => void) => {
     const onReceiveURL = ({ url }: { url: string }) => listener(url);
     const subscription = Linking.addEventListener('url', onReceiveURL);
@@ -71,7 +68,7 @@ export default function RootLayout() {
   useEffect(() => {
     activateKeepAwakeAsync('samspeak');
     return () => {
-      deactivateKeepAwake('samspeak');
+      deactivateKeepAwakeAsync('samspeak');
     };
   }, []);
 

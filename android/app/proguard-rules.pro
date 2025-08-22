@@ -27,6 +27,17 @@
 -keepclassmembers class * extends com.facebook.react.bridge.JavaScriptModule { *; }
 -keepclassmembers class * extends com.facebook.react.bridge.NativeModule { *; }
 -keepclassmembers class * extends com.facebook.react.uimanager.ViewManager { *; }
+-keepclassmembers class * {
+    @com.facebook.react.bridge.ReactMethod <methods>;
+}
+
+# React Native hooks, context 내부 클래스 보존
+-keepclassmembers class * {
+    *** Companion;
+}
+-keepclassmembers class * {
+    *** DefaultImpls;
+}
 
 # Hermes / JSC
 -keep class com.facebook.hermes.** { *; }

@@ -1,7 +1,8 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+// app/language.tsx
+import React from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useLanguage, translations, LanguageCode } from '../hooks/useLanguage';
-import { Image } from 'react-native';
+import { useLanguage, LanguageCode } from '../hooks/useLanguage';
 
 const languages: { code: LanguageCode; label: string; emoji: string }[] = [
   { code: 'en', label: 'English', emoji: '🇺🇸' },

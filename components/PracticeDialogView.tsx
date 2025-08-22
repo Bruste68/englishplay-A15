@@ -230,6 +230,14 @@ export const PracticeDialogView: React.FC<PracticeDialogViewProps> = ({
       }
       console.log('🔁 [AUTO] Triggering next line from useEffect');
       processDialogWithState(dialogState);
+
+      // 🔥 릴리즈에서 대화 끊김 방지 (재시도)
+      setTimeout(() => {
+        if (dialogState.isActive && !dialogState.isSpeaking && !dialogState.isPaused) {
+          console.log("🔁 [SAFE RETRY] Retrying auto trigger");
+          processDialogWithState(dialogState);
+        }
+      }, 150);
     }
   }, [
     practiceMode,
@@ -252,9 +260,11 @@ export const PracticeDialogView: React.FC<PracticeDialogViewProps> = ({
     console.log('[START MEMO] practiceMode:', practiceMode); 
     // ✅ practiceMode가 꺼져 있을 때만 켜기
     if (!practiceMode) togglePracticeMode();
+
+    const initialUserTurn = practice.isRoleReversed ? true : false;
     setDialogState({
       step: 0,
-      isUserTurn: true,
+      isUserTurn: initialUserTurn,  // ✅ 역할 변경 반영
       isActive: true, // ✅ 자동 흐름 작동을 위한 핵심 설정
       isSpeaking: false,
       isPaused: false,
