@@ -78,7 +78,6 @@ export default function PurchaseScreen() {
         router.replace('/screens/TopicSelectScreen');
       } else {
         Alert.alert(TT.error, json?.message || TT.verifyFail);
-        // 실패한 경우에도 transaction 정리 필요
         try { await RNIap.finishTransaction({ purchase, isConsumable: false }); } catch {}
       }
     } catch (e: any) {
@@ -103,9 +102,11 @@ export default function PurchaseScreen() {
 
       await RNIap.flushFailedPurchasesCachedAsPendingAndroid();
 
-      const items = await RNIap.getProducts(inappIds);
-      const subs = await RNIap.getSubscriptions(subsIds);
-      console.log('[IAP] getProducts:', items, 'getSubscriptions:', subs);
+      // ⚠️ getProducts/getSubscriptions 호출 방식 수정 (skus 객체 필수)
+      const items = await RNIap.getProducts({ skus: inappIds as string[] });
+      const subs = await RNIap.getSubscriptions({ skus: subsIds as string[] });
+      console.log('[IAP] getProducts returned:', items.length, items);
+      console.log('[IAP] getSubscriptions returned:', subs.length, subs);
 
       setProducts(items);
       setSubscriptions(subs);
@@ -139,7 +140,6 @@ export default function PurchaseScreen() {
       loadProducts();
     }, 1500); // 앱 실행 1.5초 후 상품 로딩 시도
 
-    loadProducts();
     return () => {
       clearTimeout(timer);
       try { purchaseUpdateSub.current?.remove(); } catch {}
