@@ -135,8 +135,13 @@ export default function PurchaseScreen() {
   };
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      loadProducts();
+    }, 1500); // 앱 실행 1.5초 후 상품 로딩 시도
+
     loadProducts();
     return () => {
+      clearTimeout(timer);
       try { purchaseUpdateSub.current?.remove(); } catch {}
       try { purchaseErrorSub.current?.remove(); } catch {}
       RNIap.endConnection();
