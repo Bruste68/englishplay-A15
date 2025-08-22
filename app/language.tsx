@@ -87,6 +87,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
- //   fontFamily: Platform.OS === 'android' ? 'sans-serif' : undefined,
+    fontFamily: Platform.OS === 'android' ? 'sans-serif' : undefined,
   }
 });

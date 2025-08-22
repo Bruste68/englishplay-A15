@@ -158,9 +158,13 @@ export const useLanguage = () => {
             console.warn('Localization not available:', e);
           }
 
-          const defaultLang: LanguageCode = ['ko', 'ja', 'zh', 'vi'].includes(deviceLang)
-            ? (deviceLang as LanguageCode)
-            : 'en';
+          // ✅ zh-Hans, zh-Hant 같은 변형까지 모두 zh로 처리
+          const defaultLang: LanguageCode =
+            ['ko', 'ja', 'vi'].includes(deviceLang)
+              ? (deviceLang as LanguageCode)
+              : deviceLang.startsWith('zh')
+                ? 'zh'
+                : 'en';
 
           setLanguage(defaultLang);
           await AsyncStorage.setItem('appLanguage', defaultLang);
@@ -184,7 +188,8 @@ export const useLanguage = () => {
     }
   };
 
-  const t = translations[language];
+  // ✅ fallback 보강
+  const t = translations[language] || translations.en;
 
   return { language, setLanguage: setAppLanguage, isReady, t };
 };

@@ -6,55 +6,125 @@ import { useRouter } from 'expo-router';
 import { API_BASE_URL } from '../lib/api';
 import { useLanguage } from '../hooks/useLanguage';
 
-const inappIds = ['premium_3m', 'premium_6m'] as const;
-const subsIds = ['premium_12m'] as const;
+const inappIds = ['premium_3m', 'premium_6m', 'premium_12m'] as const;
+const subsIds: string[] = [];
+
+// 🌐 다국어 번역 테이블
+const translations: any = {
+  ko: {
+    premiumMembership: "프리미엄 이용권",
+    buyNow: "구매하기",
+    loading: "불러오는 중...",
+    success: "성공",
+    purchaseSuccess: "프리미엄 이용이 활성화되었습니다!",
+    error: "오류",
+    verifyFail: "구매 검증에 실패했습니다.",
+    purchaseFail: "구매에 실패했습니다.",
+    purchaseCanceled: "구매가 취소되었습니다.",
+    noProductsAvailable: "구매 가능한 상품이 없습니다.",
+    desc: {
+      premium_3m: "3개월 프리미엄 이용권",
+      premium_6m: "6개월 프리미엄 이용권",
+      premium_12m: "12개월 프리미엄 이용권"
+    }
+  },
+  en: {
+    premiumMembership: "Premium Membership",
+    buyNow: "Buy Now",
+    loading: "Loading...",
+    success: "Success",
+    purchaseSuccess: "Premium access activated successfully!",
+    error: "Error",
+    verifyFail: "Purchase verification failed.",
+    purchaseFail: "Purchase failed.",
+    purchaseCanceled: "Purchase canceled.",
+    noProductsAvailable: "No products available.",
+    desc: {
+      premium_3m: "3 months premium access",
+      premium_6m: "6 months premium access",
+      premium_12m: "12 months premium access"
+    }
+  },
+  ja: {
+    premiumMembership: "プレミアム利用権",
+    buyNow: "購入する",
+    loading: "読み込み中...",
+    success: "成功",
+    purchaseSuccess: "プレミアムアクセスが有効になりました！",
+    error: "エラー",
+    verifyFail: "購入の確認に失敗しました。",
+    purchaseFail: "購入に失敗しました。",
+    purchaseCanceled: "購入がキャンセルされました。",
+    noProductsAvailable: "購入可能な商品がありません。",
+    desc: {
+      premium_3m: "3か月間のプレミアムアクセス",
+      premium_6m: "6か月間のプレミアムアクセス",
+      premium_12m: "12か月間のプレミアムアクセス"
+    }
+  },
+  zh: {
+    premiumMembership: "高级会员",
+    buyNow: "立即购买",
+    loading: "加载中...",
+    success: "成功",
+    purchaseSuccess: "高级会员已成功激活！",
+    error: "错误",
+    verifyFail: "购买验证失败。",
+    purchaseFail: "购买失败。",
+    purchaseCanceled: "购买已取消。",
+    noProductsAvailable: "没有可购买的商品。",
+    desc: {
+      premium_3m: "3个月高级访问权限",
+      premium_6m: "6个月高级访问权限",
+      premium_12m: "12个月高级访问权限"
+    }
+  },
+  vi: {
+    premiumMembership: "Quyền thành viên cao cấp",
+    buyNow: "Mua ngay",
+    loading: "Đang tải...",
+    success: "Thành công",
+    purchaseSuccess: "Truy cập cao cấp đã được kích hoạt!",
+    error: "Lỗi",
+    verifyFail: "Xác minh giao dịch mua thất bại.",
+    purchaseFail: "Mua hàng thất bại.",
+    purchaseCanceled: "Giao dịch mua đã bị hủy.",
+    noProductsAvailable: "Không có sản phẩm nào để mua.",
+    desc: {
+      premium_3m: "Truy cập cao cấp 3 tháng",
+      premium_6m: "Truy cập cao cấp 6 tháng",
+      premium_12m: "Truy cập cao cấp 12 tháng"
+    }
+  }
+};
 
 export default function PurchaseScreen() {
   const [products, setProducts] = useState<RNIap.Product[]>([]);
-  const [subscriptions, setSubscriptions] = useState<RNIap.Subscription[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [loadingPurchase, setLoadingPurchase] = useState(false);
-  const [iapAvailable, setIapAvailable] = useState<boolean | null>(null);
 
   const router = useRouter();
-  const { t, language } = useLanguage();
+  const { language } = useLanguage(); 
+  const t = translations[language] || translations.en;
 
   const purchaseUpdateSub = useRef<RNIap.PurchaseUpdatedListener>();
   const purchaseErrorSub = useRef<RNIap.PurchaseErrorListener>();
   const inFlight = useRef<string | null>(null);
 
-  const TT = {
-    premiumMembership: t?.premiumMembership || 'Premium Membership',
-    success: t?.success || 'Success',
-    purchaseSuccess: t?.purchaseSuccess || 'Premium access activated successfully!',
-    error: t?.error || 'Error',
-    noProductsAvailable: t?.noProductsAvailable || 'No products available. Please check:',
-    loading: t?.loading || 'Loading...',
-    buyNow: t?.buyNow || 'Buy Now',
-    quarterlyDescription: t?.quarterlyDescription || '3 months premium access',
-    semiannualDescription: t?.semiannualDescription || '6 months premium access',
-    annualDescription: t?.annualDescription || '1 year premium access',
-    iapInitFail: t?.iapInitFail || 'Failed to initialize In-App Purchase',
-    verifyFail: t?.verifyFail || 'Purchase verification failed',
-    purchaseFail: t?.purchaseFail || 'Purchase failed',
-    purchaseCanceled: t?.purchaseCanceled || 'Purchase canceled',
-  };
-
   // ✅ 결제 완료 → 서버 검증
   const verifyAndFinish = async (purchase: RNIap.Purchase) => {
     const tokenStr = purchase.purchaseToken ?? purchase.transactionReceipt ?? '';
     if (!tokenStr) return;
-
-    if (inFlight.current === tokenStr) return; // 중복 방지
+    if (inFlight.current === tokenStr) return;
     inFlight.current = tokenStr;
 
     try {
       const authToken = await AsyncStorage.getItem('authToken');
-      console.log('[IAP] 서버 검증 요청:', purchase.productId);
+      console.log('[IAP] verify request:', purchase.productId);
 
       const res = await fetch(`${API_BASE_URL}/api/verify-receipt`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${authToken}`
         },
@@ -67,22 +137,22 @@ export default function PurchaseScreen() {
       });
 
       const json = await res.json();
-      console.log('[IAP] 서버 응답:', json);
+      console.log('[IAP] server response:', json);
 
       if (res.ok && json?.success) {
         await RNIap.finishTransaction({ purchase, isConsumable: false });
         await AsyncStorage.setItem('currentUser', JSON.stringify(json.user));
         await AsyncStorage.setItem('preferredLang', language || 'en');
 
-        Alert.alert(TT.success, TT.purchaseSuccess);
+        Alert.alert(t.success, t.purchaseSuccess);
         router.replace('/screens/TopicSelectScreen');
       } else {
-        Alert.alert(TT.error, json?.message || TT.verifyFail);
+        Alert.alert(t.error, json?.message || t.verifyFail);
         try { await RNIap.finishTransaction({ purchase, isConsumable: false }); } catch {}
       }
     } catch (e: any) {
       console.warn('[IAP] verify/finish error:', e);
-      Alert.alert(TT.error, TT.purchaseFail);
+      Alert.alert(t.error, t.purchaseFail);
       try { await RNIap.finishTransaction({ purchase, isConsumable: false }); } catch {}
     } finally {
       inFlight.current = null;
@@ -95,28 +165,14 @@ export default function PurchaseScreen() {
     setLoadingProducts(true);
     try {
       const connected = await RNIap.initConnection();
-      setIapAvailable(connected);
       console.log('[IAP] initConnection:', connected);
-
-      if (!connected) throw new Error(TT.iapInitFail);
+      if (!connected) throw new Error("IAP init failed");
 
       await RNIap.flushFailedPurchasesCachedAsPendingAndroid();
 
-      // ⚠️ getProducts/getSubscriptions 호출 방식 수정 (skus 객체 필수)
       const items = await RNIap.getProducts({ skus: inappIds as string[] });
-      const subs = await RNIap.getSubscriptions({ skus: subsIds as string[] });
       console.log('[IAP] getProducts returned:', items.length, items);
-      console.log('[IAP] getSubscriptions returned:', subs.length, subs);
-
       setProducts(items);
-      setSubscriptions(subs);
-
-      if (items.length + subs.length === 0) {
-        Alert.alert(
-          TT.error,
-          `${TT.noProductsAvailable}\n\n- Play 스토어 내부 테스트 트랙에서 설치했는지?\n- 테스트 계정 로그인 여부 확인\n- AndroidManifest에 BILLING 권한 추가 여부 확인`
-        );
-      }
 
       purchaseUpdateSub.current = RNIap.purchaseUpdatedListener(async (purchase) => {
         console.log('[IAP] purchaseUpdatedListener:', purchase);
@@ -124,12 +180,16 @@ export default function PurchaseScreen() {
       });
       purchaseErrorSub.current = RNIap.purchaseErrorListener((e) => {
         console.warn('[IAP] purchaseErrorListener:', e);
-        Alert.alert(TT.error, e?.message || TT.purchaseFail);
+        if (e.code === 'E_USER_CANCELLED') {
+          Alert.alert(t.error, t.purchaseCanceled);
+        } else {
+          Alert.alert(t.error, e?.message || t.purchaseFail);
+        }
         setLoadingPurchase(false);
       });
     } catch (e: any) {
       console.warn('[IAP] init error:', e);
-      Alert.alert(TT.error, TT.iapInitFail + ': ' + e.message);
+      Alert.alert(t.error, "IAP init failed: " + e.message);
     } finally {
       setLoadingProducts(false);
     }
@@ -138,7 +198,7 @@ export default function PurchaseScreen() {
   useEffect(() => {
     const timer = setTimeout(() => {
       loadProducts();
-    }, 1500); // 앱 실행 1.5초 후 상품 로딩 시도
+    }, 1500);
 
     return () => {
       clearTimeout(timer);
@@ -154,53 +214,40 @@ export default function PurchaseScreen() {
     setLoadingPurchase(true);
     try {
       await RNIap.requestPurchase({
-        productId,
+        skus: [productId],
         andDangerouslyFinishTransactionAutomatically: false,
       });
     } catch (err: any) {
       console.warn('[IAP] request error:', err);
-      Alert.alert(TT.error, err?.message || TT.purchaseFail);
+      Alert.alert(t.error, err?.message || t.purchaseFail);
       setLoadingPurchase(false);
     }
   };
 
-  const renderProduct = (p: RNIap.Product | RNIap.Subscription) => (
+  const renderProduct = (p: RNIap.Product) => (
     <View key={p.productId} style={styles.productCard}>
-      <Text style={styles.productTitle}>{p.title}</Text>
+      <Text style={styles.productTitle}>{t.desc[p.productId]}</Text>
       <Text style={styles.productPrice}>{p.localizedPrice}</Text>
-      <Text style={styles.productDescription}>
-        {getProductDescription(p.productId, TT)}
-      </Text>
-      <Button title={TT.buyNow} onPress={() => handlePurchase(p.productId)} />
+      <Button title={t.buyNow} onPress={() => handlePurchase(p.productId)} />
     </View>
   );
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>🛒 {TT.premiumMembership}</Text>
+      <Text style={styles.title}>🛒 {t.premiumMembership}</Text>
       {loadingProducts ? (
-        <Text>{TT.loading}</Text>
+        <Text>{t.loading}</Text>
       ) : (
         <>
           {products.map(renderProduct)}
-          {subscriptions.map(renderProduct)}
-          {products.length + subscriptions.length === 0 && (
-            <Text>{TT.noProductsAvailable}</Text>
+          {products.length === 0 && (
+            <Text>{t.noProductsAvailable}</Text>
           )}
-          {loadingPurchase && <Text>{TT.loading}</Text>}
+          {loadingPurchase && <Text>{t.loading}</Text>}
         </>
       )}
     </ScrollView>
   );
-}
-
-function getProductDescription(productId: string, TT: any) {
-  switch (productId) {
-    case 'premium_3m': return TT.quarterlyDescription;
-    case 'premium_6m': return TT.semiannualDescription;
-    case 'premium_12m': return TT.annualDescription;
-    default: return '';
-  }
 }
 
 const styles = StyleSheet.create({
@@ -209,5 +256,4 @@ const styles = StyleSheet.create({
   productCard: { backgroundColor: '#F8F9FA', padding: 16, borderRadius: 8, marginBottom: 16 },
   productTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
   productPrice: { fontSize: 16, color: '#007AFF', marginBottom: 8 },
-  productDescription: { fontSize: 14, color: '#666', marginBottom: 12 },
 });
