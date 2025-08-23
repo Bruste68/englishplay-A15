@@ -6,94 +6,94 @@ import { useRouter } from 'expo-router';
 import { API_BASE_URL } from '../lib/api';
 import { useLanguage } from '../hooks/useLanguage';
 
-const inappIds = ['premium_3m', 'premium_6m', 'premium_12m'] as const;
-const subsIds: string[] = [];
+// ✅ 구독 상품 ID (Google Play Console 기준)
+const subsIds = ['sub_premium_3m', 'sub_premium_6m', 'sub_premium_12m'];
 
-// 🌐 다국어 번역 테이블
+// 🌐 다국어 번역 테이블 (기존 유지)
 const translations: any = {
   ko: {
-    premiumMembership: "프리미엄 이용권",
-    buyNow: "구매하기",
+    premiumMembership: "프리미엄 구독",
+    buyNow: "구독하기",
     loading: "불러오는 중...",
     success: "성공",
-    purchaseSuccess: "프리미엄 이용이 활성화되었습니다!",
+    purchaseSuccess: "프리미엄 구독이 활성화되었습니다!",
     error: "오류",
-    verifyFail: "구매 검증에 실패했습니다.",
-    purchaseFail: "구매에 실패했습니다.",
-    purchaseCanceled: "구매가 취소되었습니다.",
-    noProductsAvailable: "구매 가능한 상품이 없습니다.",
+    verifyFail: "구독 검증에 실패했습니다.",
+    purchaseFail: "구독에 실패했습니다.",
+    purchaseCanceled: "구독이 취소되었습니다.",
+    noProductsAvailable: "구독 가능한 상품이 없습니다.",
     desc: {
-      premium_3m: "3개월 프리미엄 이용권",
-      premium_6m: "6개월 프리미엄 이용권",
-      premium_12m: "12개월 프리미엄 이용권"
+      sub_premium_3m: "3개월 프리미엄 구독",
+      sub_premium_6m: "6개월 프리미엄 구독",
+      sub_premium_12m: "12개월 프리미엄 구독"
     }
   },
   en: {
-    premiumMembership: "Premium Membership",
-    buyNow: "Buy Now",
+    premiumMembership: "Premium Subscription",
+    buyNow: "Subscribe Now",
     loading: "Loading...",
     success: "Success",
-    purchaseSuccess: "Premium access activated successfully!",
+    purchaseSuccess: "Premium subscription activated successfully!",
     error: "Error",
-    verifyFail: "Purchase verification failed.",
-    purchaseFail: "Purchase failed.",
-    purchaseCanceled: "Purchase canceled.",
-    noProductsAvailable: "No products available.",
+    verifyFail: "Subscription verification failed.",
+    purchaseFail: "Subscription failed.",
+    purchaseCanceled: "Subscription canceled.",
+    noProductsAvailable: "No subscriptions available.",
     desc: {
-      premium_3m: "3 months premium access",
-      premium_6m: "6 months premium access",
-      premium_12m: "12 months premium access"
+      sub_premium_3m: "3 months premium subscription",
+      sub_premium_6m: "6 months premium subscription",
+      sub_premium_12m: "12 months premium subscription"
     }
   },
   ja: {
-    premiumMembership: "プレミアム利用権",
-    buyNow: "購入する",
+    premiumMembership: "プレミアム購読",
+    buyNow: "購読する",
     loading: "読み込み中...",
     success: "成功",
-    purchaseSuccess: "プレミアムアクセスが有効になりました！",
+    purchaseSuccess: "プレミアム購読が有効になりました！",
     error: "エラー",
-    verifyFail: "購入の確認に失敗しました。",
-    purchaseFail: "購入に失敗しました。",
-    purchaseCanceled: "購入がキャンセルされました。",
-    noProductsAvailable: "購入可能な商品がありません。",
+    verifyFail: "購読の確認に失敗しました。",
+    purchaseFail: "購読に失敗しました。",
+    purchaseCanceled: "購読がキャンセルされました。",
+    noProductsAvailable: "利用可能な購読がありません。",
     desc: {
-      premium_3m: "3か月間のプレミアムアクセス",
-      premium_6m: "6か月間のプレミアムアクセス",
-      premium_12m: "12か月間のプレミアムアクセス"
+      sub_premium_3m: "3か月のプレミアム購読",
+      sub_premium_6m: "6か月のプレミアム購読",
+      sub_premium_12m: "12か月のプレミアム購読"
     }
   },
   zh: {
-    premiumMembership: "高级会员",
-    buyNow: "立即购买",
+    premiumMembership: "高级订阅",
+    buyNow: "立即订阅",
     loading: "加载中...",
     success: "成功",
-    purchaseSuccess: "高级会员已成功激活！",
+    purchaseSuccess: "高级订阅已成功激活！",
     error: "错误",
-    verifyFail: "购买验证失败。",
-    purchaseFail: "购买失败。",
-    purchaseCanceled: "购买已取消。",
-    noProductsAvailable: "没有可购买的商品。",
+    verifyFail: "订阅验证失败。",
+    purchaseFail: "订阅失败。",
+    purchaseCanceled: "订阅已取消。",
+    noProductsAvailable: "没有可用的订阅。",
     desc: {
-      premium_3m: "3个月高级访问权限",
-      premium_6m: "6个月高级访问权限",
-      premium_12m: "12个月高级访问权限"
+      sub_premium_3m: "3个月高级订阅",
+      sub_premium_6m: "6个月高级订阅",
+      sub_premium_12m: "12个月高级订阅"
     }
   },
   vi: {
-    premiumMembership: "Quyền thành viên cao cấp",
-    buyNow: "Mua ngay",
+    premiumMembership: "Đăng ký Cao cấp",
+    buyNow: "Đăng ký ngay",
     loading: "Đang tải...",
     success: "Thành công",
-    purchaseSuccess: "Truy cập cao cấp đã được kích hoạt!",
+    purchaseSuccess: "Đăng ký cao cấp đã được kích hoạt!",
     error: "Lỗi",
-    verifyFail: "Xác minh giao dịch mua thất bại.",
-    purchaseFail: "Mua hàng thất bại.",
-    purchaseCanceled: "Giao dịch mua đã bị hủy.",
-    noProductsAvailable: "Không có sản phẩm nào để mua.",
+    verifyFail: "Xác minh đăng ký thất bại.",
+    purchaseFail: "Đăng ký thất bại.",
+    purchaseCanceled: "Đăng ký đã bị hủy.",
+    noProductsAvailable: "Không có gói đăng ký nào khả dụng.",
     desc: {
-      premium_3m: "Truy cập cao cấp 3 tháng",
-      premium_6m: "Truy cập cao cấp 6 tháng",
-      premium_12m: "Truy cập cao cấp 12 tháng"
+      sub_premium_3m: "Đăng ký cao cấp 3 tháng",
+      sub_premium_6m: "Đăng ký cao cấp 6 tháng",
+      sub_premium_12m: "Đăng ký cao cấp 12 tháng"
     }
   }
 };
@@ -160,7 +160,7 @@ export default function PurchaseScreen() {
     }
   };
 
-  // ✅ 상품 로딩
+  // ✅ 상품 로딩 (구독 전용)
   const loadProducts = async () => {
     setLoadingProducts(true);
     try {
@@ -170,8 +170,9 @@ export default function PurchaseScreen() {
 
       await RNIap.flushFailedPurchasesCachedAsPendingAndroid();
 
-      const items = await RNIap.getProducts({ skus: inappIds as string[] });
-      console.log('[IAP] getProducts returned:', items.length, items);
+      // ⚡ 구독 상품 가져오기
+      const items = await RNIap.getSubscriptions({ skus: subsIds });
+      console.log('[IAP] getSubscriptions returned:', items.length, items);
       setProducts(items);
 
       purchaseUpdateSub.current = RNIap.purchaseUpdatedListener(async (purchase) => {
@@ -208,13 +209,13 @@ export default function PurchaseScreen() {
     };
   }, []);
 
-  // ✅ 구매 요청
+  // ✅ 구독 요청
   const handlePurchase = async (productId: string) => {
-    console.log('[IAP] handlePurchase:', productId);
+    console.log('[IAP] handleSubscription:', productId);
     setLoadingPurchase(true);
     try {
-      await RNIap.requestPurchase({
-        skus: [productId],
+      await RNIap.requestSubscription({
+        sku: productId,
         andDangerouslyFinishTransactionAutomatically: false,
       });
     } catch (err: any) {
