@@ -93,8 +93,8 @@ missingDimensionStrategy "store", "play"
         applicationId 'com.bruste68.englishplayondevice.play'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 45
-        versionName "4.0.5"
+        versionCode 46
+        versionName "4.0.6"
     }
     signingConfigs {
         debug {
@@ -135,7 +135,10 @@ missingDimensionStrategy "store", "play"
             minifyEnabled true         // 코드 난독화 활성화
             // shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             // minifyEnabled enableProguardInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            // proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            proguardFiles getDefaultProguardFile(
+                "proguard-android-optimize.txt"
+            ), "proguard-rules.pro"
             crunchPngs (findProperty('android.enablePngCrunchInReleaseBuilds')?.toBoolean() ?: true)
         }
     }

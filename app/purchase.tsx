@@ -9,7 +9,7 @@ import { useLanguage } from '../hooks/useLanguage';
 // ✅ 구독 상품 ID (Google Play Console 기준)
 const subsIds = ['sub_premium_3m', 'sub_premium_6m', 'sub_premium_12m'];
 
-// 🌐 다국어 번역 테이블 (기존 유지)
+// 🌐 다국어 번역 테이블
 const translations: any = {
   ko: {
     premiumMembership: "프리미엄 구독",
@@ -173,6 +173,11 @@ export default function PurchaseScreen() {
       // ⚡ 구독 상품 가져오기
       const items = await RNIap.getSubscriptions({ skus: subsIds });
       console.log('[IAP] getSubscriptions returned:', items.length, items);
+
+      // 원하는 순서대로 정렬 (3개월 → 6개월 → 12개월)
+      const order = ['sub_premium_3m', 'sub_premium_6m', 'sub_premium_12m'];
+      items.sort((a, b) => order.indexOf(a.productId) - order.indexOf(b.productId));
+
       setProducts(items);
 
       purchaseUpdateSub.current = RNIap.purchaseUpdatedListener(async (purchase) => {
@@ -209,13 +214,24 @@ export default function PurchaseScreen() {
     };
   }, []);
 
-  // ✅ 구독 요청
+  // ✅ 구독 요청 (offerToken 포함)
   const handlePurchase = async (productId: string) => {
     console.log('[IAP] handleSubscription:', productId);
     setLoadingPurchase(true);
+
     try {
+      const product = products.find(p => p.productId === productId);
+      const offerToken = product?.subscriptionOfferDetails?.[0]?.offerToken;
+
+      if (!offerToken) {
+        Alert.alert(t.error, t.verifyFail + " (구독 혜택이 콘솔에 설정되지 않았습니다.)");
+        setLoadingPurchase(false);
+        return;
+      }
+
       await RNIap.requestSubscription({
         sku: productId,
+        subscriptionOffers: [{ offerToken }], // ✅ 필수
         andDangerouslyFinishTransactionAutomatically: false,
       });
     } catch (err: any) {
