@@ -160,7 +160,7 @@ export default function PurchaseScreen() {
     }
   };
 
-  // ✅ 상품 로딩 (구독 전용)
+  // ✅ 상품 로딩
   const loadProducts = async () => {
     setLoadingProducts(true);
     try {
@@ -170,11 +170,11 @@ export default function PurchaseScreen() {
 
       await RNIap.flushFailedPurchasesCachedAsPendingAndroid();
 
-      // ⚡ 구독 상품 가져오기
       const items = await RNIap.getSubscriptions({ skus: subsIds });
-      console.log('[IAP] getSubscriptions returned:', items.length, items);
+      console.log('[IAP] getSubscriptions returned:', items.length);
+      // 🐞 DEBUG: 전체 내려온 상품 로그
+      console.log('[IAP] raw products:', JSON.stringify(items, null, 2));
 
-      // 원하는 순서대로 정렬 (3개월 → 6개월 → 12개월)
       const order = ['sub_premium_3m', 'sub_premium_6m', 'sub_premium_12m'];
       items.sort((a, b) => order.indexOf(a.productId) - order.indexOf(b.productId));
 
@@ -214,14 +214,17 @@ export default function PurchaseScreen() {
     };
   }, []);
 
-  // ✅ 구독 요청 (offerToken 포함)
+  // ✅ 구독 요청
   const handlePurchase = async (productId: string) => {
-    console.log('[IAP] handleSubscription:', productId);
-    setLoadingPurchase(true);
+    console.log('[IAP] handleSubscription start:', productId);
 
+    setLoadingPurchase(true);
     try {
       const product = products.find(p => p.productId === productId);
+      console.log('[IAP] selected product:', JSON.stringify(product, null, 2)); // 🐞 DEBUG
+
       const offerToken = product?.subscriptionOfferDetails?.[0]?.offerToken;
+      console.log('[IAP] offerToken:', offerToken); // 🐞 DEBUG
 
       if (!offerToken) {
         Alert.alert(t.error, t.verifyFail + " (구독 혜택이 콘솔에 설정되지 않았습니다.)");
@@ -231,9 +234,11 @@ export default function PurchaseScreen() {
 
       await RNIap.requestSubscription({
         sku: productId,
-        subscriptionOffers: [{ offerToken }], // ✅ 필수
+        subscriptionOffers: [{ offerToken }], 
         andDangerouslyFinishTransactionAutomatically: false,
       });
+      console.log('[IAP] requestSubscription sent:', productId, offerToken); // 🐞 DEBUG
+
     } catch (err: any) {
       console.warn('[IAP] request error:', err);
       Alert.alert(t.error, err?.message || t.purchaseFail);
