@@ -228,7 +228,9 @@ export default function PurchaseScreen() {
       // const offerToken = product?.subscriptionOfferDetails?.[0]?.offerToken;
       const offer = product?.subscriptionOfferDetails?.find(o => o.offerId?.includes('basic'));
       const offerToken = offer?.offerToken;
+      const basePlanId = offer?.basePlanId;
 
+      console.log('[IAP] basePlanId:', basePlanId);
       console.log('[IAP] offerToken:', offerToken); // 🐞 DEBUG
 
       if (!offerToken) {
@@ -238,11 +240,16 @@ export default function PurchaseScreen() {
       }
 
       await RNIap.requestSubscription({
-        sku: productId,
-        subscriptionOffers: [{ offerToken }], 
+        productId: productId,  // ✅ sku 대신 productId
+        subscriptionOffers: [
+          {
+            basePlanId,
+            offerToken,
+          },
+        ],
         andDangerouslyFinishTransactionAutomatically: false,
       });
-      console.log('[IAP] requestSubscription sent:', productId, offerToken); // 🐞 DEBUG
+      console.log('[IAP] requestSubscription sent:', productId, basePlanId, offerToken); // 🐞 DEBUG
 
     } catch (err: any) {
       console.warn('[IAP] request error:', err);
