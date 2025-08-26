@@ -7,7 +7,7 @@ import { API_BASE_URL } from '../lib/api';
 import { useLanguage } from '../hooks/useLanguage';
 
 // ✅ 구독 상품 ID (Google Play Console 기준)
-const subsIds = ['sub_premium_3m', 'sub_premium_6m', 'sub_premium_12m'];
+const productIds = ['sub_premium_3m', 'sub_premium_6m', 'sub_premium_12m'];
 
 // 🌐 다국어 번역 테이블
 const translations: any = {
@@ -170,7 +170,8 @@ export default function PurchaseScreen() {
 
       await RNIap.flushFailedPurchasesCachedAsPendingAndroid();
 
-      const items = await RNIap.getSubscriptions({ skus: subsIds });
+      // const items = await RNIap.getSubscriptions({ skus: subsIds });
+      const items = await RNIap.getSubscriptions({ productIds });
       console.log('[IAP] getSubscriptions returned:', items.length);
       // 🐞 DEBUG: 전체 내려온 상품 로그
       console.log('[IAP] raw products:', JSON.stringify(items, null, 2));
@@ -189,7 +190,8 @@ export default function PurchaseScreen() {
         if (e.code === 'E_USER_CANCELLED') {
           Alert.alert(t.error, t.purchaseCanceled);
         } else {
-          Alert.alert(t.error, e?.message || t.purchaseFail);
+          // Alert.alert(t.error, e?.message || t.purchaseFail);
+          Alert.alert(t.error, e?.debugMessage || e?.message || t.purchaseFail);
         }
         setLoadingPurchase(false);
       });
@@ -223,7 +225,10 @@ export default function PurchaseScreen() {
       const product = products.find(p => p.productId === productId);
       console.log('[IAP] selected product:', JSON.stringify(product, null, 2)); // 🐞 DEBUG
 
-      const offerToken = product?.subscriptionOfferDetails?.[0]?.offerToken;
+      // const offerToken = product?.subscriptionOfferDetails?.[0]?.offerToken;
+      const offer = product?.subscriptionOfferDetails?.find(o => o.offerId?.includes('basic'));
+      const offerToken = offer?.offerToken;
+
       console.log('[IAP] offerToken:', offerToken); // 🐞 DEBUG
 
       if (!offerToken) {
@@ -233,7 +238,7 @@ export default function PurchaseScreen() {
       }
 
       await RNIap.requestSubscription({
-        sku: productId,
+        productId: productId,
         subscriptionOffers: [{ offerToken }], 
         andDangerouslyFinishTransactionAutomatically: false,
       });
