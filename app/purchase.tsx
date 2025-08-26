@@ -171,7 +171,7 @@ export default function PurchaseScreen() {
       await RNIap.flushFailedPurchasesCachedAsPendingAndroid();
 
       // const items = await RNIap.getSubscriptions({ skus: subsIds });
-      const items = await RNIap.getSubscriptions({ productIds });
+      const items = await RNIap.getSubscriptions({ skus: productIds });
       console.log('[IAP] getSubscriptions returned:', items.length);
       // 🐞 DEBUG: 전체 내려온 상품 로그
       console.log('[IAP] raw products:', JSON.stringify(items, null, 2));
@@ -238,7 +238,7 @@ export default function PurchaseScreen() {
       }
 
       await RNIap.requestSubscription({
-        productId: productId,
+        sku: productId,
         subscriptionOffers: [{ offerToken }], 
         andDangerouslyFinishTransactionAutomatically: false,
       });
