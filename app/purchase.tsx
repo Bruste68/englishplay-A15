@@ -424,4 +424,4 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   activeText: { fontSize: 16, color: '#2E7D32', marginBottom: 10 }
-});});
+});
