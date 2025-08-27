@@ -240,6 +240,7 @@ export default function PurchaseScreen() {
       }
 
       await RNIap.requestSubscription({
+        sku: productId,
         productId: productId,  // ✅ sku 대신 productId
         subscriptionOffers: [
           {

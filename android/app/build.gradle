@@ -93,8 +93,8 @@ missingDimensionStrategy "store", "play"
         applicationId 'com.bruste68.englishplayondevice.play'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 51
-        versionName "5.0.1"
+        versionCode 52
+        versionName "5.0.2"
     }
     signingConfigs {
         debug {
