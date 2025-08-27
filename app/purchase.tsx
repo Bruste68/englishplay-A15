@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Button, Alert, ScrollView, StyleSheet, Platform } from 'react-native';
+import { View, Text, Button, Alert, ScrollView, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import * as RNIap from 'react-native-iap';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -102,6 +102,7 @@ export default function PurchaseScreen() {
   const [products, setProducts] = useState<RNIap.Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [loadingPurchase, setLoadingPurchase] = useState(false);
+  const [currentSubscription, setCurrentSubscription] = useState<string | null>(null);
 
   const router = useRouter();
   const { language } = useLanguage(); 
@@ -110,6 +111,30 @@ export default function PurchaseScreen() {
   const purchaseUpdateSub = useRef<RNIap.PurchaseUpdatedListener>();
   const purchaseErrorSub = useRef<RNIap.PurchaseErrorListener>();
   const inFlight = useRef<string | null>(null);
+
+  // ✅ 현재 구독 상태 확인
+  const checkCurrentSubscription = async () => {
+    try {
+      const authToken = await AsyncStorage.getItem('authToken');
+      if (!authToken) return;
+
+      const res = await fetch(`${API_BASE_URL}/api/purchase/status`, {
+        headers: {
+          Authorization: `Bearer ${authToken}`
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.active) {
+          // 이미 프리미엄 구독 중인 경우
+          setCurrentSubscription('active');
+        }
+      }
+    } catch (error) {
+      console.warn('구독 상태 확인 실패:', error);
+    }
+  };
 
   // ✅ 결제 완료 → 서버 검증
   const verifyAndFinish = async (purchase: RNIap.Purchase) => {
@@ -141,11 +166,21 @@ export default function PurchaseScreen() {
 
       if (res.ok && json?.success) {
         await RNIap.finishTransaction({ purchase, isConsumable: false });
-        await AsyncStorage.setItem('currentUser', JSON.stringify(json.user));
+        
+        // ✅ 사용자 정보 업데이트
+        if (json.user) {
+          await AsyncStorage.setItem('currentUser', JSON.stringify(json.user));
+        }
+        await AsyncStorage.setItem('premiumActive', 'true');
         await AsyncStorage.setItem('preferredLang', language || 'en');
 
         Alert.alert(t.success, t.purchaseSuccess);
-        router.replace('/screens/TopicSelectScreen');
+        
+        // ✅ 상태 업데이트 후 네비게이션
+        setCurrentSubscription('active');
+        setTimeout(() => {
+          router.replace('/screens/TopicSelectScreen');
+        }, 1000);
       } else {
         Alert.alert(t.error, json?.message || t.verifyFail);
         try { await RNIap.finishTransaction({ purchase, isConsumable: false }); } catch {}
@@ -170,31 +205,61 @@ export default function PurchaseScreen() {
 
       await RNIap.flushFailedPurchasesCachedAsPendingAndroid();
 
-      // const items = await RNIap.getSubscriptions({ skus: subsIds });
       const items = await RNIap.getSubscriptions({ skus: productIds });
       console.log('[IAP] getSubscriptions returned:', items.length);
-      // 🐞 DEBUG: 전체 내려온 상품 로그
-      console.log('[IAP] raw products:', JSON.stringify(items, null, 2));
 
       const order = ['sub_premium_3m', 'sub_premium_6m', 'sub_premium_12m'];
       items.sort((a, b) => order.indexOf(a.productId) - order.indexOf(b.productId));
 
       setProducts(items);
 
+      // ✅ 기존 미결제 트랜잭션 처리
+      try {
+        const availablePurchases = await RNIap.getAvailablePurchases();
+        console.log('[IAP] availablePurchases:', availablePurchases.length);
+        for (const purchase of availablePurchases) {
+          if (purchase.productId && productIds.includes(purchase.productId)) {
+            await verifyAndFinish(purchase);
+          }
+        }
+      } catch (error) {
+        console.warn('[IAP] available purchases error:', error);
+      }
+
       purchaseUpdateSub.current = RNIap.purchaseUpdatedListener(async (purchase) => {
         console.log('[IAP] purchaseUpdatedListener:', purchase);
         await verifyAndFinish(purchase);
       });
+      
       purchaseErrorSub.current = RNIap.purchaseErrorListener((e) => {
         console.warn('[IAP] purchaseErrorListener:', e);
         if (e.code === 'E_USER_CANCELLED') {
           Alert.alert(t.error, t.purchaseCanceled);
+        } else if (e.code === 'E_ALREADY_OWNED') {
+          Alert.alert(
+            t.error, 
+            '이미 구독 중인 상품입니다. 구글 플레이 스토어에서 구독을 관리해주세요.',
+            [
+              {
+                text: '확인',
+                onPress: () => {
+                  // 구글 플레이 스토어 구독 관리 페이지로 이동
+                  if (Platform.OS === 'android') {
+                    Linking.openURL('https://play.google.com/store/account/subscriptions');
+                  }
+                }
+              }
+            ]
+          );
         } else {
-          // Alert.alert(t.error, e?.message || t.purchaseFail);
           Alert.alert(t.error, e?.debugMessage || e?.message || t.purchaseFail);
         }
         setLoadingPurchase(false);
       });
+
+      // ✅ 현재 구독 상태 확인
+      await checkCurrentSubscription();
+
     } catch (e: any) {
       console.warn('[IAP] init error:', e);
       Alert.alert(t.error, "IAP init failed: " + e.message);
@@ -220,18 +285,34 @@ export default function PurchaseScreen() {
   const handlePurchase = async (productId: string) => {
     console.log('[IAP] handleSubscription start:', productId);
 
+    // 이미 구독 중인 경우
+    if (currentSubscription === 'active') {
+      Alert.alert(
+        '이미 구독 중',
+        '이미 프리미엄 구독 중입니다. 구글 플레이 스토어에서 구독을 관리해주세요.',
+        [
+          {
+            text: '확인',
+            onPress: () => {
+              if (Platform.OS === 'android') {
+                Linking.openURL('https://play.google.com/store/account/subscriptions');
+              }
+            }
+          }
+        ]
+      );
+      return;
+    }
+
     setLoadingPurchase(true);
     try {
       const product = products.find(p => p.productId === productId);
-      console.log('[IAP] selected product:', JSON.stringify(product, null, 2)); // 🐞 DEBUG
+      console.log('[IAP] selected product:', JSON.stringify(product, null, 2));
 
-      // const offerToken = product?.subscriptionOfferDetails?.[0]?.offerToken;
-      const offer = product?.subscriptionOfferDetails?.find(o => o.offerId?.includes('basic'));
+      const offer = product?.subscriptionOfferDetails?.find(o => 
+        o.offerId?.includes('basic') || o.offerTags?.includes('subscription')
+      );
       const offerToken = offer?.offerToken;
-      const basePlanId = offer?.basePlanId;
-
-      console.log('[IAP] basePlanId:', basePlanId);
-      console.log('[IAP] offerToken:', offerToken); // 🐞 DEBUG
 
       if (!offerToken) {
         Alert.alert(t.error, t.verifyFail + " (구독 혜택이 콘솔에 설정되지 않았습니다.)");
@@ -241,20 +322,36 @@ export default function PurchaseScreen() {
 
       await RNIap.requestSubscription({
         sku: productId,
-        productId: productId,  // ✅ sku 대신 productId
         subscriptionOffers: [
           {
-            basePlanId,
-            offerToken,
+            sku: productId,
+            offerToken: offerToken,
           },
         ],
         andDangerouslyFinishTransactionAutomatically: false,
       });
-      console.log('[IAP] requestSubscription sent:', productId, basePlanId, offerToken); // 🐞 DEBUG
+      console.log('[IAP] requestSubscription sent:', productId, offerToken);
 
     } catch (err: any) {
       console.warn('[IAP] request error:', err);
-      Alert.alert(t.error, err?.message || t.purchaseFail);
+      if (err.code === 'E_ALREADY_OWNED') {
+        Alert.alert(
+          '이미 구독 중',
+          '이미 해당 상품을 구독 중입니다. 구글 플레이 스토어에서 구독을 관리해주세요.',
+          [
+            {
+              text: '확인',
+              onPress: () => {
+                if (Platform.OS === 'android') {
+                  Linking.openURL('https://play.google.com/store/account/subscriptions');
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert(t.error, err?.message || t.purchaseFail);
+      }
       setLoadingPurchase(false);
     }
   };
@@ -263,22 +360,49 @@ export default function PurchaseScreen() {
     <View key={p.productId} style={styles.productCard}>
       <Text style={styles.productTitle}>{t.desc[p.productId]}</Text>
       <Text style={styles.productPrice}>{p.localizedPrice}</Text>
-      <Button title={t.buyNow} onPress={() => handlePurchase(p.productId)} />
+      <Button 
+        title={t.buyNow} 
+        onPress={() => handlePurchase(p.productId)}
+        disabled={currentSubscription === 'active' || loadingPurchase}
+      />
     </View>
   );
 
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>🛒 {t.premiumMembership}</Text>
+      
+      {currentSubscription === 'active' && (
+        <View style={styles.activeSubscription}>
+          <Text style={styles.activeText}>✅ 이미 프리미엄 구독 중입니다</Text>
+          <Button
+            title="구독 관리하기"
+            onPress={() => {
+              if (Platform.OS === 'android') {
+                Linking.openURL('https://play.google.com/store/account/subscriptions');
+              }
+            }}
+          />
+        </View>
+      )}
+
       {loadingProducts ? (
-        <Text>{t.loading}</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text>{t.loading}</Text>
+        </View>
       ) : (
         <>
           {products.map(renderProduct)}
           {products.length === 0 && (
             <Text>{t.noProductsAvailable}</Text>
           )}
-          {loadingPurchase && <Text>{t.loading}</Text>}
+          {loadingPurchase && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <Text>{t.loading}</Text>
+            </View>
+          )}
         </>
       )}
     </ScrollView>
@@ -291,4 +415,13 @@ const styles = StyleSheet.create({
   productCard: { backgroundColor: '#F8F9FA', padding: 16, borderRadius: 8, marginBottom: 16 },
   productTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
   productPrice: { fontSize: 16, color: '#007AFF', marginBottom: 8 },
-});
+  loadingContainer: { alignItems: 'center', justifyContent: 'center', padding: 20 },
+  activeSubscription: { 
+    backgroundColor: '#E8F5E8', 
+    padding: 16, 
+    borderRadius: 8, 
+    marginBottom: 20,
+    alignItems: 'center'
+  },
+  activeText: { fontSize: 16, color: '#2E7D32', marginBottom: 10 }
+});});
