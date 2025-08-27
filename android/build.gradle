@@ -1,6 +1,9 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
+  ext {
+    playBillingLibraryVersion = rootProject.hasProperty("RNIap_playBillingSdkVersion") ? RNIap_playBillingSdkVersion : "7.0.0"
+  }
   repositories {
     google()
     mavenCentral()
