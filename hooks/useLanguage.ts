@@ -145,26 +145,25 @@ export const useLanguage = () => {
         if (stored && ['en', 'ko', 'ja', 'zh', 'vi'].includes(stored)) {
           setLanguage(stored as LanguageCode);
         } else {
-          // 안전한 locale 처리
-          let deviceLang = 'en';
+          // ✅ 안전한 locale 처리
+          let deviceLang: string = 'en';
           try {
             const locales = Localization.getLocales?.();
             if (Array.isArray(locales) && locales.length > 0) {
-              deviceLang = locales[0].languageCode;
-            } else if (Localization.locale) {
-              deviceLang = Localization.locale.split('-')[0];
+              // ✅ null 방지: 기본값 'en'
+              deviceLang = locales[0].languageCode ?? 'en';
             }
           } catch (e) {
             console.warn('Localization not available:', e);
           }
 
-          // ✅ zh-Hans, zh-Hant 같은 변형까지 모두 zh로 처리
+          // ✅ zh-Hans, zh-Hant → zh 로 통합
           const defaultLang: LanguageCode =
             ['ko', 'ja', 'vi'].includes(deviceLang)
               ? (deviceLang as LanguageCode)
               : deviceLang.startsWith('zh')
-                ? 'zh'
-                : 'en';
+              ? 'zh'
+              : 'en';
 
           setLanguage(defaultLang);
           await AsyncStorage.setItem('appLanguage', defaultLang);

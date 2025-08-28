@@ -1,4 +1,3 @@
-// app/_layout.tsx
 import { View, useColorScheme } from 'react-native';
 import { Stack } from 'expo-router';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
@@ -8,7 +7,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useCallback } from 'react';
 import { PersistentChatHistoryProvider } from '../context/PersistentChatHistoryContext';
 import * as Linking from 'expo-linking';
-import { activateKeepAwakeAsync, deactivateKeepAwakeAsync } from 'expo-keep-awake';
+import { activateKeepAwakeAsync } from 'expo-keep-awake'; // ✅ deactivate 제거
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -16,7 +15,6 @@ export const unstable_settings = {
 
 SplashScreen.preventAutoHideAsync();
 
-// ✅ 딥링크 prefix 설정
 const linking = {
   prefixes: [
     'englishplayondevice://',
@@ -41,7 +39,6 @@ const linking = {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
@@ -49,7 +46,6 @@ function RootLayoutNav() {
         <Stack.Screen name="language" />
         <Stack.Screen name="screens/TopicSelectScreen" />
         <Stack.Screen name="ChatScreen" />
-        {/* 🗑️ WhisperRecorderScreen 제거됨 */}
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
@@ -68,7 +64,7 @@ export default function RootLayout() {
   useEffect(() => {
     activateKeepAwakeAsync('samspeak');
     return () => {
-      deactivateKeepAwakeAsync('samspeak');
+      // ✅ 최신 SDK에서는 deactivate 없음 → cleanup 비워둠
     };
   }, []);
 

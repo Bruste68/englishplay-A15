@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Button, Alert, ScrollView, StyleSheet, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, Button, Alert, ScrollView, StyleSheet, Platform, ActivityIndicator, Linking } from 'react-native';
 import * as RNIap from 'react-native-iap';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -22,6 +22,9 @@ const translations: any = {
     purchaseFail: "구독에 실패했습니다.",
     purchaseCanceled: "구독이 취소되었습니다.",
     noProductsAvailable: "구독 가능한 상품이 없습니다.",
+    manageSubscription: "구독 관리하기",
+    alreadySubscribed: "이미 프리미엄 구독 중입니다",
+    alreadySubscribedDesc: "이미 해당 상품을 구독 중입니다. 구글 플레이 스토어에서 구독을 관리해주세요.",
     desc: {
       sub_premium_3m: "3개월 프리미엄 구독",
       sub_premium_6m: "6개월 프리미엄 구독",
@@ -39,6 +42,9 @@ const translations: any = {
     purchaseFail: "Subscription failed.",
     purchaseCanceled: "Subscription canceled.",
     noProductsAvailable: "No subscriptions available.",
+    manageSubscription: "Manage Subscription",
+    alreadySubscribed: "Already subscribed to premium",
+    alreadySubscribedDesc: "You are already subscribed to this product. Please manage your subscription in Google Play Store.",
     desc: {
       sub_premium_3m: "3 months premium subscription",
       sub_premium_6m: "6 months premium subscription",
@@ -56,6 +62,9 @@ const translations: any = {
     purchaseFail: "購読に失敗しました。",
     purchaseCanceled: "購読がキャンセルされました。",
     noProductsAvailable: "利用可能な購読がありません。",
+    manageSubscription: "購読を管理",
+    alreadySubscribed: "すでにプレミアム購読中です",
+    alreadySubscribedDesc: "すでにこの商品を購読中です。Google Play ストアで購読を管理してください。",
     desc: {
       sub_premium_3m: "3か月のプレミアム購読",
       sub_premium_6m: "6か月のプレミアム購読",
@@ -73,6 +82,9 @@ const translations: any = {
     purchaseFail: "订阅失败。",
     purchaseCanceled: "订阅已取消。",
     noProductsAvailable: "没有可用的订阅。",
+    manageSubscription: "管理订阅",
+    alreadySubscribed: "已订阅高级版",
+    alreadySubscribedDesc: "您已订阅此产品。请在Google Play商店中管理您的订阅。",
     desc: {
       sub_premium_3m: "3个月高级订阅",
       sub_premium_6m: "6个月高级订阅",
@@ -90,6 +102,9 @@ const translations: any = {
     purchaseFail: "Đăng ký thất bại.",
     purchaseCanceled: "Đăng ký đã bị hủy.",
     noProductsAvailable: "Không có gói đăng ký nào khả dụng.",
+    manageSubscription: "Quản lý đăng ký",
+    alreadySubscribed: "Đã đăng ký gói cao cấp",
+    alreadySubscribedDesc: "Bạn đã đăng ký sản phẩm này. Vui lòng quản lý đăng ký trong Google Play Store.",
     desc: {
       sub_premium_3m: "Đăng ký cao cấp 3 tháng",
       sub_premium_6m: "Đăng ký cao cấp 6 tháng",
@@ -99,7 +114,7 @@ const translations: any = {
 };
 
 export default function PurchaseScreen() {
-  const [products, setProducts] = useState<RNIap.Product[]>([]);
+  const [products, setProducts] = useState<RNIap.Subscription[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [loadingPurchase, setLoadingPurchase] = useState(false);
   const [currentSubscription, setCurrentSubscription] = useState<string | null>(null);
@@ -108,8 +123,9 @@ export default function PurchaseScreen() {
   const { language } = useLanguage(); 
   const t = translations[language] || translations.en;
 
-  const purchaseUpdateSub = useRef<RNIap.PurchaseUpdatedListener>();
-  const purchaseErrorSub = useRef<RNIap.PurchaseErrorListener>();
+  // ✅ 리스너 타입 안전하게 관리
+  const purchaseUpdateSub = useRef<ReturnType<typeof RNIap.purchaseUpdatedListener> | null>(null);
+  const purchaseErrorSub = useRef<ReturnType<typeof RNIap.purchaseErrorListener> | null>(null);
   const inFlight = useRef<string | null>(null);
 
   // ✅ 현재 구독 상태 확인
@@ -205,7 +221,7 @@ export default function PurchaseScreen() {
 
       await RNIap.flushFailedPurchasesCachedAsPendingAndroid();
 
-      const items = await RNIap.getSubscriptions({ skus: productIds });
+      const items: RNIap.Subscription[] = await RNIap.getSubscriptions({ skus: productIds });
       console.log('[IAP] getSubscriptions returned:', items.length);
 
       const order = ['sub_premium_3m', 'sub_premium_6m', 'sub_premium_12m'];
@@ -238,10 +254,10 @@ export default function PurchaseScreen() {
         } else if (e.code === 'E_ALREADY_OWNED') {
           Alert.alert(
             t.error, 
-            '이미 구독 중인 상품입니다. 구글 플레이 스토어에서 구독을 관리해주세요.',
+            t.alreadySubscribedDesc,
             [
               {
-                text: '확인',
+                text: 'OK',
                 onPress: () => {
                   // 구글 플레이 스토어 구독 관리 페이지로 이동
                   if (Platform.OS === 'android') {
@@ -288,11 +304,11 @@ export default function PurchaseScreen() {
     // 이미 구독 중인 경우
     if (currentSubscription === 'active') {
       Alert.alert(
-        '이미 구독 중',
-        '이미 프리미엄 구독 중입니다. 구글 플레이 스토어에서 구독을 관리해주세요.',
+        t.alreadySubscribed,
+        t.alreadySubscribedDesc,
         [
           {
-            text: '확인',
+            text: 'OK',
             onPress: () => {
               if (Platform.OS === 'android') {
                 Linking.openURL('https://play.google.com/store/account/subscriptions');
@@ -309,7 +325,8 @@ export default function PurchaseScreen() {
       const product = products.find(p => p.productId === productId);
       console.log('[IAP] selected product:', JSON.stringify(product, null, 2));
 
-      const offer = product?.subscriptionOfferDetails?.find(o => 
+      const androidProduct = product as RNIap.SubscriptionAndroid;
+      const offer = androidProduct.subscriptionOfferDetails?.find((o: any) =>
         o.offerId?.includes('basic') || o.offerTags?.includes('subscription')
       );
       const offerToken = offer?.offerToken;
@@ -329,18 +346,18 @@ export default function PurchaseScreen() {
           },
         ],
         andDangerouslyFinishTransactionAutomatically: false,
-      });
+      } as any);
       console.log('[IAP] requestSubscription sent:', productId, offerToken);
 
     } catch (err: any) {
       console.warn('[IAP] request error:', err);
       if (err.code === 'E_ALREADY_OWNED') {
         Alert.alert(
-          '이미 구독 중',
-          '이미 해당 상품을 구독 중입니다. 구글 플레이 스토어에서 구독을 관리해주세요.',
+          t.alreadySubscribed,
+          t.alreadySubscribedDesc,
           [
             {
-              text: '확인',
+              text: 'OK',
               onPress: () => {
                 if (Platform.OS === 'android') {
                   Linking.openURL('https://play.google.com/store/account/subscriptions');
@@ -356,10 +373,10 @@ export default function PurchaseScreen() {
     }
   };
 
-  const renderProduct = (p: RNIap.Product) => (
+  const renderProduct = (p: RNIap.Subscription) => (
     <View key={p.productId} style={styles.productCard}>
       <Text style={styles.productTitle}>{t.desc[p.productId]}</Text>
-      <Text style={styles.productPrice}>{p.localizedPrice}</Text>
+      <Text style={styles.productPrice}>{(p as any).localizedPrice}</Text>
       <Button 
         title={t.buyNow} 
         onPress={() => handlePurchase(p.productId)}
@@ -374,9 +391,9 @@ export default function PurchaseScreen() {
       
       {currentSubscription === 'active' && (
         <View style={styles.activeSubscription}>
-          <Text style={styles.activeText}>✅ 이미 프리미엄 구독 중입니다</Text>
+          <Text style={styles.activeText}>✅ {t.alreadySubscribed}</Text>
           <Button
-            title="구독 관리하기"
+            title={t.manageSubscription}
             onPress={() => {
               if (Platform.OS === 'android') {
                 Linking.openURL('https://play.google.com/store/account/subscriptions');

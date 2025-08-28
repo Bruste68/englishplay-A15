@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Slot } from 'expo-router';
+import { Slot, useRouter } from 'expo-router';
+import { API_BASE_URL } from './lib/api'; // ✅ 추가
 
 // 다국어 안내 메시지
 const whisperMessage = {
@@ -28,6 +29,7 @@ const whisperMessage = {
 };
 
 export default function App() {
+  const router = useRouter();
 
   useEffect(() => {
     (async () => {
@@ -41,6 +43,42 @@ export default function App() {
         console.log('📆 기존 설치일:', saved);
       }
 
+      // ✅ 토큰 유효성 검사
+      const authToken = await AsyncStorage.getItem('authToken');
+      const currentUser = await AsyncStorage.getItem('currentUser');
+      
+      if (!authToken || !currentUser) {
+        // 토큰이나 사용자 정보가 없으면 로그인 화면으로
+        await AsyncStorage.removeItem('premiumActive');
+        router.replace('/screens/LoginScreen');
+        return;
+      }
+
+      // ✅ 토큰 검증 시도
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/verify-token`, {
+          headers: {
+            Authorization: `Bearer ${authToken}`
+          }
+        });
+
+        if (!response.ok) {
+          // 토큰이 유효하지 않으면 로그인 화면으로
+          await AsyncStorage.removeItem('authToken');
+          await AsyncStorage.removeItem('currentUser');
+          await AsyncStorage.removeItem('premiumActive');
+          router.replace('/screens/LoginScreen');
+          return;
+        }
+      } catch (error) {
+        console.warn('토큰 검증 실패:', error);
+        await AsyncStorage.removeItem('authToken');
+        await AsyncStorage.removeItem('currentUser');
+        await AsyncStorage.removeItem('premiumActive');
+        router.replace('/screens/LoginScreen');
+        return;
+      }
+
       // ✅ Whisper 권한 체크 후 안내
       const canUse = await AsyncStorage.getItem('canUseWhisper');
       if (canUse === 'false') {
@@ -48,8 +86,14 @@ export default function App() {
         const msg = whisperMessage[lang as keyof typeof whisperMessage] || whisperMessage['en'];
         Alert.alert(msg.title, msg.message);
       }
-    })();
-  }, []);
 
-  return <Slot />; // ✅ expo-router 진입점
+      // ✅ 구독 상태 확인
+      const premiumActive = await AsyncStorage.getItem('premiumActive');
+      if (premiumActive === 'true' && currentUser) {
+        router.replace('/screens/TopicSelectScreen');
+      }
+    })();
+  }, [router]);
+
+  return <Slot />;
 }
