@@ -298,9 +298,18 @@ export const PracticeDialogView: React.FC<PracticeDialogViewProps> = ({
       }
 
       // 🎧 녹음 중이면 중단
+  //    if (isRecording) {
+  //      console.log('🛑 [뒤로가기] 녹음 중 → 중단');
+  //      await stopRecording();  // useVoice에서 가져온 함수
+  //    }
+
       if (isRecording) {
         console.log('🛑 [뒤로가기] 녹음 중 → 중단');
-        await stopRecording();  // useVoice에서 가져온 함수
+        try {
+          await stopRecording();
+        } catch (err) {
+          console.warn('⚠️ stopRecording 중복 호출 무시:', err?.message || err);
+        }
       }
 
       // 🌐 Whisper 전송 중이면 중단

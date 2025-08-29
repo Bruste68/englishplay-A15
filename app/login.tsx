@@ -1,4 +1,3 @@
-// login.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
@@ -25,45 +24,50 @@ async function getDeviceId(): Promise<string> {
   }
 }
 
-/** ─────────────────────────────────────────────────────────
- *  유틸
- *  ──────────────────────────────────────────────────────── */
-const toBool = (v: any): boolean =>
-  v === true || v === 'true' || v === 1 || v === '1';
-
-const parseDate = (raw: any): Date | null => {
-  if (!raw && raw !== 0) return null;
-  if (raw instanceof Date) return isNaN(raw.getTime()) ? null : raw;
-
-  if (typeof raw === 'number' || (typeof raw === 'string' && /^\d+$/.test(raw.trim()))) {
-    const n = Number(raw);
-    if (Number.isNaN(n)) return null;
-    const ms = n < 1e12 ? n * 1000 : n; // sec -> ms
-    const d = new Date(ms);
-    return isNaN(d.getTime()) ? null : d;
-  }
-
-  if (typeof raw === 'string' && ['null', 'undefined'].includes(raw.trim().toLowerCase())) {
-    return null;
-  }
-
-  const d = new Date(raw);
-  return isNaN(d.getTime()) ? null : d;
-};
-
 export default function LoginScreen() {
   const router = useRouter();
   const { language, t } = useLanguage();
   const [userId, setUserId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
+  // ✅ 마운트 시 아이디/로그인 상태 복원
   useEffect(() => {
     const init = async () => {
-      const savedId = await AsyncStorage.getItem('rememberedUserId');
-      if (savedId) {
-        setUserId(savedId);
-        setRememberMe(true);
+      try {
+        const [savedId, currentUserStr, authToken] = await Promise.all([
+          AsyncStorage.getItem('rememberedUserId'),
+          AsyncStorage.getItem('currentUser'),
+          AsyncStorage.getItem('authToken'),
+        ]);
+
+        console.log("🔎 [LoginScreen.init]");
+        console.log(" savedId:", savedId);
+        console.log(" currentUserStr:", currentUserStr);
+        console.log(" authToken:", authToken);
+
+        setIsLoggedIn(!!authToken);
+
+        if (savedId) {
+          setUserId(savedId);
+          setRememberMe(true);
+          return;
+        }
+
+        if (currentUserStr) {
+          try {
+            const currentUser = JSON.parse(currentUserStr);
+            if (currentUser?.userId) {
+              setUserId(currentUser.userId);
+              return;
+            }
+          } catch (err) {
+            console.warn("currentUser 파싱 실패:", err);
+          }
+        }
+      } catch (error) {
+        console.error('Init error:', error);
       }
     };
     init();
@@ -77,8 +81,7 @@ export default function LoginScreen() {
       };
 
       const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-
-      return () => subscription.remove();  // ✅ 수정
+      return () => subscription.remove();
     }, [])
   );
 
@@ -103,7 +106,7 @@ export default function LoginScreen() {
       ko: '이 디바이스는 이미 다른 계정에 등록되어 있습니다.',
       en: 'This device is already registered to another account.',
       zh: '该设备已注册到其他帐户。',
-      ja: 'このデバイスはすでに別のアカウントに登録されています。',
+      ja: 'このデバ이스はすでに別のアカウントに登録されています。',
       vi: 'Thiết bị này đã được đăng ký cho tài khoản khác.',
     },
     premiumRequired: {
@@ -121,29 +124,26 @@ export default function LoginScreen() {
       vi: 'Mua gói Premium',
     },
   };
- // const getLocalized = (obj: Record<string, string>): string => obj[language] || obj['en'];
+
   const getLocalized = (obj: Record<string, string>): string => {
     if (obj[language]) return obj[language];
-
-    // 중국어 계열은 모두 zh 로 매핑 (간체만 지원)
-    if (language.startsWith('zh')) {
-      if (obj['zh']) return obj['zh'];
-    }
-
-    return obj['en']; // 기본 영어 fallback
+    if (language.startsWith('zh') && obj['zh']) return obj['zh'];
+    return obj['en'];
   };
 
   /** ✅ 공용: 구매화면으로 강제 이동 */
   const goPurchase = (
     reason: 'trial_expired' | 'device_conflict' | 'premium_required',
-    redirectTo?: string
+    redirectTo?: string,
+    purchaseToken?: string
   ) => {
     router.push({
       pathname: '/purchase',
-      params: { reason, ...(redirectTo ? { redirectTo } : {}) },
+      params: { reason, ...(redirectTo ? { redirectTo } : {}), ...(purchaseToken ? { purchaseToken } : {}) },
     });
   };
 
+  /** ✅ 로그인 처리 */
   const handleLogin = async () => {
     if (!userId.trim()) {
       Alert.alert(t.error, t.enterId);
@@ -151,62 +151,54 @@ export default function LoginScreen() {
     }
 
     const deviceId = await getDeviceId();
+    console.log("📱 디바이스 ID:", deviceId);
     setIsLoading(true);
 
     try {
+      console.log("🌍 로그인 요청 시작:", API_BASE_URL + "/login");
       const response = await axios.post(`${API_BASE_URL}/api/login`, {
         username: userId.trim(),
         deviceId,
       });
 
+      console.log("✅ 로그인 응답 전체:", response.data);
       const { token, user, premiumRequired, redirectTo } = response.data;
 
-      await AsyncStorage.setItem('authToken', token);
-      await AsyncStorage.setItem('currentUser', JSON.stringify(user));
-      await AsyncStorage.setItem('language', language);
-      await AsyncStorage.setItem('preferredLang', user.language || language);
+      // ✅ userId 필드 일관성
+      const uid = user.userId || user.id;
+      setUserId(uid);
+
+      if (!token) {
+        Alert.alert("에러", "서버 응답에 토큰이 없습니다.");
+        return;
+      }
+
+      // ✅ 토큰/유저정보 저장
+      await Promise.all([
+        AsyncStorage.setItem('authToken', token),
+        AsyncStorage.setItem('currentUser', JSON.stringify(user)),
+        AsyncStorage.setItem('language', language),
+        AsyncStorage.setItem('preferredLang', user.language || language),
+      ]);
 
       if (rememberMe) {
-        await AsyncStorage.setItem('rememberedUserId', userId.trim());
+        await AsyncStorage.setItem('rememberedUserId', uid);
       } else {
         await AsyncStorage.removeItem('rememberedUserId');
       }
 
-      // ─────────────────────────────────────
-      const nowMs = Date.now();
-      const TRIAL_DAYS = 3;
+      const trialExpired = user.trialExpired ?? false;
+      const isPremium = user.isPremium ?? false;
+      const isAdmin = user.isAdmin ?? false;
 
-      const isAdmin = toBool(user?.isAdmin ?? user?.is_admin);
-      const trialStart = parseDate(
-        user?.trialStartAt ?? user?.trial_start_at ?? user?.trial_started_at
-      );
+      setIsLoggedIn(true);
 
-      let trialExpired = true;
-      if (trialStart) {
-        const diffDays = Math.max(0, nowMs - trialStart.getTime()) / 86400000;
-        trialExpired = diffDays > TRIAL_DAYS;
-      }
-
-      const premiumExpiresAt = parseDate(
-        user?.premiumExpiresAt ??
-        user?.premium_expires_at ??
-        user?.premiumUntil ??
-        user?.subscriptionExpiresAt
-      );
-
-      let isPremium = false;
-      if (premiumExpiresAt) {
-        const leftMs = premiumExpiresAt.getTime() - nowMs;
-        isPremium = leftMs > 60 * 1000; // 60초 스큐 허용
-      }
-      // ─────────────────────────────────────
-
-      if (isAdmin || isPremium) {
-        router.replace('/screens/TopicSelectScreen');
+      if (!token) {
+        Alert.alert("에러", "로그인 토큰이 저장되지 않았습니다. 다시 시도해주세요.");
         return;
       }
 
-      if (!trialExpired) {
+      if (isAdmin || isPremium || !trialExpired) {
         router.replace('/screens/TopicSelectScreen');
         return;
       }
@@ -231,22 +223,32 @@ export default function LoginScreen() {
           { text: getLocalized(localizedText.purchaseNow), onPress: () => goPurchase('trial_expired') },
         ]
       );
-
     } catch (error: any) {
+      Keyboard.dismiss();
       const status = error?.response?.status;
       const data = error?.response?.data || {};
       const code: string = data?.code || '';
       const msg: string | undefined = data?.message;
 
       if (status === 403 && (code === 'DEVICE_CONFLICT' || code === 'TRIAL_EXPIRED' || code === 'PREMIUM_REQUIRED')) {
-        Keyboard.dismiss();
+        const purchaseToken = data?.purchaseToken;
+        console.log("🎫 서버에서 받은 purchaseToken:", purchaseToken);
+
+        // ✅ purchaseToken 저장 로직 추가
+        if (purchaseToken) {
+          await AsyncStorage.setItem('purchaseToken', purchaseToken);
+          console.log("💾 purchaseToken AsyncStorage 저장 완료");
+        }
 
         if (code === 'DEVICE_CONFLICT') {
           Alert.alert(
             getLocalized(localizedText.deviceAlreadyRegistered),
-            `${getLocalized(localizedText.premiumRequired)}\n\nID: ${data?.existingUserId ?? ''}`,
+            `${getLocalized(localizedText.premiumRequired)}\n\n(${t.enterId}: ${data?.existingUserId ?? ''})`,
             [
-              { text: getLocalized(localizedText.goToPurchase), onPress: () => goPurchase('device_conflict', data?.redirectTo) },
+              { 
+                text: getLocalized(localizedText.goToPurchase), 
+                onPress: () => goPurchase('device_conflict', data?.redirectTo || undefined) 
+              },
               { text: getLocalized(localizedText.cancelPurchase), style: 'cancel' },
             ]
           );
@@ -255,25 +257,52 @@ export default function LoginScreen() {
 
         Alert.alert(
           getLocalized(localizedText.trialExpiredTitle),
-          msg || getLocalized(localizedText.premiumExpiredMessage),
+          (msg || getLocalized(localizedText.premiumExpiredMessage)) + `\n\n🎫 purchaseToken: ${purchaseToken || '없음'}`,
           [
             { text: getLocalized(localizedText.cancelPurchase), style: 'cancel' },
-            { text: getLocalized(localizedText.purchaseNow), onPress: () => goPurchase(code === 'TRIAL_EXPIRED' ? 'trial_expired' : 'premium_required', data?.redirectTo) },
+            { 
+              text: getLocalized(localizedText.purchaseNow), 
+              onPress: () => goPurchase(
+                code === 'TRIAL_EXPIRED' ? 'trial_expired' : 'premium_required', 
+                data?.redirectTo || undefined
+              ) 
+            },
           ]
         );
         return;
       }
 
-      Keyboard.dismiss();
-      const rawMsg = msg;
-      let finalMessage = typeof rawMsg === 'string' ? rawMsg : t.tryAgain;
+      let finalMessage = typeof msg === 'string' ? msg : t.tryAgain;
       try {
-        const parsed = JSON.parse(rawMsg as any);
+        const parsed = JSON.parse(msg as any);
         if (parsed?.message) finalMessage = parsed.message;
       } catch {}
       Alert.alert(t.loginFailed, finalMessage);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // ✅ 로그아웃 처리
+  const handleLogout = async () => {
+    try {
+      await Promise.all([
+        AsyncStorage.removeItem('authToken'),
+        AsyncStorage.removeItem('premiumActive'),
+        AsyncStorage.removeItem('canUseWhisper'),
+        AsyncStorage.removeItem('currentUser'),
+      ]);
+
+      if (rememberMe && userId) {
+        await AsyncStorage.setItem('rememberedUserId', userId);
+      } else {
+        await AsyncStorage.removeItem('rememberedUserId');
+      }
+
+      setUserId('');
+      setIsLoggedIn(false);
+    } catch (error) {
+      console.error('Logout error:', error);
     }
   };
 
@@ -294,11 +323,18 @@ export default function LoginScreen() {
         onChangeText={setUserId}
         autoCapitalize="none"
         keyboardAppearance="light"
+        editable={!isLoggedIn}
       />
 
-      <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={isLoading}>
-        {isLoading ? <ActivityIndicator color="white" /> : <Text style={styles.loginButtonText}>{t.login}</Text>}
-      </TouchableOpacity>
+      {isLoggedIn ? (
+        <TouchableOpacity style={[styles.loginButton, { backgroundColor: 'red' }]} onPress={handleLogout}>
+          <Text style={styles.loginButtonText}>{t.logout || '로그아웃'}</Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={isLoading}>
+          {isLoading ? <ActivityIndicator color="white" /> : <Text style={styles.loginButtonText}>{t.login}</Text>}
+        </TouchableOpacity>
+      )}
 
       <View style={styles.checkboxContainer}>
         <TouchableOpacity onPress={() => setRememberMe(!rememberMe)} style={styles.checkbox}>

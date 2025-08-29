@@ -132,18 +132,21 @@ export default function PurchaseScreen() {
   const checkCurrentSubscription = async () => {
     try {
       const authToken = await AsyncStorage.getItem('authToken');
-      if (!authToken) return;
+      const purchaseToken = await AsyncStorage.getItem('purchaseToken');
+      const usedToken = authToken || purchaseToken;
+
+      console.log('🛒 PurchaseScreen 토큰:', authToken ? 'authToken 있음' : purchaseToken ? 'purchaseToken 있음' : '없음');
+      if (!usedToken) return;
 
       const res = await fetch(`${API_BASE_URL}/api/purchase/status`, {
         headers: {
-          Authorization: `Bearer ${authToken}`
+          Authorization: `Bearer ${usedToken}`
         }
       });
 
       if (res.ok) {
         const data = await res.json();
         if (data.active) {
-          // 이미 프리미엄 구독 중인 경우
           setCurrentSubscription('active');
         }
       }
@@ -161,13 +164,16 @@ export default function PurchaseScreen() {
 
     try {
       const authToken = await AsyncStorage.getItem('authToken');
-      console.log('[IAP] verify request:', purchase.productId);
+      const purchaseToken = await AsyncStorage.getItem('purchaseToken');
+      const usedToken = authToken || purchaseToken;
 
-      const res = await fetch(`${API_BASE_URL}/api/verify-receipt`, {
+      console.log('[IAP] verify request:', purchase.productId, 'with token:', usedToken);
+
+      const res = await fetch(`${API_BASE_URL}/api/purchase/verify-receipt`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`
+          Authorization: `Bearer ${usedToken}`
         },
         body: JSON.stringify({
           productId: purchase.productId,
@@ -183,16 +189,15 @@ export default function PurchaseScreen() {
       if (res.ok && json?.success) {
         await RNIap.finishTransaction({ purchase, isConsumable: false });
         
-        // ✅ 사용자 정보 업데이트
         if (json.user) {
           await AsyncStorage.setItem('currentUser', JSON.stringify(json.user));
         }
         await AsyncStorage.setItem('premiumActive', 'true');
+        await AsyncStorage.removeItem('purchaseToken'); // ✅ 구매 완료 후 purchaseToken 제거
         await AsyncStorage.setItem('preferredLang', language || 'en');
 
         Alert.alert(t.success, t.purchaseSuccess);
         
-        // ✅ 상태 업데이트 후 네비게이션
         setCurrentSubscription('active');
         setTimeout(() => {
           router.replace('/screens/TopicSelectScreen');
@@ -213,6 +218,9 @@ export default function PurchaseScreen() {
 
   // ✅ 상품 로딩
   const loadProducts = async () => {
+    const debugToken = await AsyncStorage.getItem('authToken');
+    if (!debugToken) console.warn("❌ PurchaseScreen 진입 시 토큰 없음");
+
     setLoadingProducts(true);
     try {
       const connected = await RNIap.initConnection();
@@ -226,10 +234,8 @@ export default function PurchaseScreen() {
 
       const order = ['sub_premium_3m', 'sub_premium_6m', 'sub_premium_12m'];
       items.sort((a, b) => order.indexOf(a.productId) - order.indexOf(b.productId));
-
       setProducts(items);
 
-      // ✅ 기존 미결제 트랜잭션 처리
       try {
         const availablePurchases = await RNIap.getAvailablePurchases();
         console.log('[IAP] availablePurchases:', availablePurchases.length);
@@ -259,7 +265,6 @@ export default function PurchaseScreen() {
               {
                 text: 'OK',
                 onPress: () => {
-                  // 구글 플레이 스토어 구독 관리 페이지로 이동
                   if (Platform.OS === 'android') {
                     Linking.openURL('https://play.google.com/store/account/subscriptions');
                   }
@@ -273,7 +278,6 @@ export default function PurchaseScreen() {
         setLoadingPurchase(false);
       });
 
-      // ✅ 현재 구독 상태 확인
       await checkCurrentSubscription();
 
     } catch (e: any) {
@@ -285,6 +289,13 @@ export default function PurchaseScreen() {
   };
 
   useEffect(() => {
+    (async () => {
+      const savedAuthToken = await AsyncStorage.getItem('authToken');
+      const savedPurchaseToken = await AsyncStorage.getItem('purchaseToken');
+      console.log("🛒 PurchaseScreen 진입 시 저장된 authToken:", savedAuthToken);
+      console.log("🎫 PurchaseScreen 진입 시 저장된 purchaseToken:", savedPurchaseToken);
+    })();
+
     const timer = setTimeout(() => {
       loadProducts();
     }, 1500);
@@ -295,13 +306,12 @@ export default function PurchaseScreen() {
       try { purchaseErrorSub.current?.remove(); } catch {}
       RNIap.endConnection();
     };
-  }, []);
+  }, [language]);
 
   // ✅ 구독 요청
   const handlePurchase = async (productId: string) => {
     console.log('[IAP] handleSubscription start:', productId);
 
-    // 이미 구독 중인 경우
     if (currentSubscription === 'active') {
       Alert.alert(
         t.alreadySubscribed,
