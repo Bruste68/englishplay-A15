@@ -123,7 +123,7 @@ export default function PurchaseScreen() {
   const { language } = useLanguage(); 
   const t = translations[language] || translations.en;
 
-  // ✅ 리스너 타입 안전하게 관리
+  // ✅ 리스너
   const purchaseUpdateSub = useRef<ReturnType<typeof RNIap.purchaseUpdatedListener> | null>(null);
   const purchaseErrorSub = useRef<ReturnType<typeof RNIap.purchaseErrorListener> | null>(null);
   const inFlight = useRef<string | null>(null);
@@ -132,16 +132,15 @@ export default function PurchaseScreen() {
   const checkCurrentSubscription = async () => {
     try {
       const authToken = await AsyncStorage.getItem('authToken');
-      const purchaseToken = await AsyncStorage.getItem('purchaseToken');
-      const usedToken = purchaseToken || authToken;
+      if (!authToken) {
+        console.warn("❌ No authToken when checking subscription");
+        return;
+      }
 
-      console.log('🛒 PurchaseScreen 토큰:', authToken ? 'authToken 있음' : purchaseToken ? 'purchaseToken 있음' : '없음');
-      if (!usedToken) return;
+      console.log('🛒 PurchaseScreen: authToken 있음');
 
       const res = await fetch(`${API_BASE_URL}/api/purchase/status`, {
-        headers: {
-          Authorization: `Bearer ${usedToken}`
-        }
+        headers: { Authorization: `Bearer ${authToken}` }
       });
 
       if (res.ok) {
@@ -164,21 +163,23 @@ export default function PurchaseScreen() {
 
     try {
       const authToken = await AsyncStorage.getItem('authToken');
-      const purchaseToken = await AsyncStorage.getItem('purchaseToken');
-      const usedToken = authToken || purchaseToken;
+      if (!authToken) {
+        console.warn("[IAP] No authToken available for verification");
+        return;
+      }
 
-      console.log('[IAP] verify request:', purchase.productId, 'with token:', usedToken);
+      console.log('[IAP] verify request:', purchase.productId);
 
       const res = await fetch(`${API_BASE_URL}/api/purchase/verify-receipt`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${usedToken}`
+          Authorization: `Bearer ${authToken}`, // ✅ authToken만 사용
         },
         body: JSON.stringify({
           productId: purchase.productId,
           transactionId: purchase.transactionId ?? null,
-          receipt: tokenStr,
+          receipt: tokenStr, // ✅ 영수증(purchaseToken)
           platform: Platform.OS,
         }),
       });
@@ -193,8 +194,13 @@ export default function PurchaseScreen() {
           await AsyncStorage.setItem('currentUser', JSON.stringify(json.user));
         }
         await AsyncStorage.setItem('premiumActive', 'true');
-        await AsyncStorage.removeItem('purchaseToken'); // ✅ 구매 완료 후 purchaseToken 제거
         await AsyncStorage.setItem('preferredLang', language || 'en');
+
+        // ✅ 새 authToken 교체
+        if (json.token) {
+          await AsyncStorage.setItem('authToken', json.token);
+          console.log("💾 새 authToken 저장 완료:", json.token);
+        }
 
         Alert.alert(t.success, t.purchaseSuccess);
         
@@ -219,7 +225,7 @@ export default function PurchaseScreen() {
   // ✅ 상품 로딩
   const loadProducts = async () => {
     const debugToken = await AsyncStorage.getItem('authToken');
-    if (!debugToken) console.warn("❌ PurchaseScreen 진입 시 토큰 없음");
+    if (!debugToken) console.warn("❌ PurchaseScreen 진입 시 authToken 없음");
 
     setLoadingProducts(true);
     try {
@@ -236,6 +242,7 @@ export default function PurchaseScreen() {
       items.sort((a, b) => order.indexOf(a.productId) - order.indexOf(b.productId));
       setProducts(items);
 
+      // ✅ 이전 구매 처리
       try {
         const availablePurchases = await RNIap.getAvailablePurchases();
         console.log('[IAP] availablePurchases:', availablePurchases.length);
@@ -248,6 +255,7 @@ export default function PurchaseScreen() {
         console.warn('[IAP] available purchases error:', error);
       }
 
+      // ✅ 리스너 등록
       purchaseUpdateSub.current = RNIap.purchaseUpdatedListener(async (purchase) => {
         console.log('[IAP] purchaseUpdatedListener:', purchase);
         await verifyAndFinish(purchase);
@@ -291,9 +299,7 @@ export default function PurchaseScreen() {
   useEffect(() => {
     (async () => {
       const savedAuthToken = await AsyncStorage.getItem('authToken');
-      const savedPurchaseToken = await AsyncStorage.getItem('purchaseToken');
-      console.log("🛒 PurchaseScreen 진입 시 저장된 authToken:", savedAuthToken);
-      console.log("🎫 PurchaseScreen 진입 시 저장된 purchaseToken:", savedPurchaseToken);
+      console.log("🛒 PurchaseScreen 진입 시 authToken:", savedAuthToken);
     })();
 
     const timer = setTimeout(() => {

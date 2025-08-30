@@ -106,7 +106,7 @@ export default function LoginScreen() {
       ko: '이 디바이스는 이미 다른 계정에 등록되어 있습니다.',
       en: 'This device is already registered to another account.',
       zh: '该设备已注册到其他帐户。',
-      ja: 'このデバ이스はすでに別のアカウントに登録されています。',
+      ja: 'このデバイスはすでに別のアカウントに登録されています。',
       vi: 'Thiết bị này đã được đăng ký cho tài khoản khác.',
     },
     premiumRequired: {
@@ -123,6 +123,20 @@ export default function LoginScreen() {
       ja: '購入画面へ',
       vi: 'Mua gói Premium',
     },
+    invalidUserId: {
+      ko: '아이디는 영문과 숫자만 입력 가능합니다.',
+      en: 'User ID must contain only letters and numbers.',
+      zh: '用户ID只能包含字母和数字。',
+      ja: 'ユーザーIDは英数字のみ入力できます。',
+      vi: 'ID chỉ được phép chứa chữ cái và số.',
+    },
+    invalidUserIdTitle: {
+      ko: '아이디 입력 오류',
+      en: 'Invalid User ID',
+      zh: '用户ID无效',
+      ja: '無効なユーザーID',
+      vi: 'ID không hợp lệ',
+    },
   };
 
   const getLocalized = (obj: Record<string, string>): string => {
@@ -131,15 +145,14 @@ export default function LoginScreen() {
     return obj['en'];
   };
 
-  /** ✅ 공용: 구매화면으로 강제 이동 */
+  /** ✅ 구매화면으로 이동 */
   const goPurchase = (
     reason: 'trial_expired' | 'device_conflict' | 'premium_required',
     redirectTo?: string,
-    purchaseToken?: string
   ) => {
     router.push({
       pathname: '/purchase',
-      params: { reason, ...(redirectTo ? { redirectTo } : {}), ...(purchaseToken ? { purchaseToken } : {}) },
+      params: { reason, ...(redirectTo ? { redirectTo } : {}) },
     });
   };
 
@@ -164,7 +177,6 @@ export default function LoginScreen() {
       console.log("✅ 로그인 응답 전체:", response.data);
       const { token, user, premiumRequired, redirectTo } = response.data;
 
-      // ✅ userId 필드 일관성
       const uid = user.userId || user.id;
       setUserId(uid);
 
@@ -192,11 +204,6 @@ export default function LoginScreen() {
       const isAdmin = user.isAdmin ?? false;
 
       setIsLoggedIn(true);
-
-      if (!token) {
-        Alert.alert("에러", "로그인 토큰이 저장되지 않았습니다. 다시 시도해주세요.");
-        return;
-      }
 
       if (isAdmin || isPremium || !trialExpired) {
         router.replace('/screens/TopicSelectScreen');
@@ -231,24 +238,12 @@ export default function LoginScreen() {
       const msg: string | undefined = data?.message;
 
       if (status === 403 && (code === 'DEVICE_CONFLICT' || code === 'TRIAL_EXPIRED' || code === 'PREMIUM_REQUIRED')) {
-        const purchaseToken = data?.purchaseToken;
-        console.log("🎫 서버에서 받은 purchaseToken:", purchaseToken);
-
-        // ✅ purchaseToken 저장 로직 추가
-        if (purchaseToken) {
-          await AsyncStorage.setItem('purchaseToken', purchaseToken);
-          console.log("💾 purchaseToken AsyncStorage 저장 완료");
-        }
-
         if (code === 'DEVICE_CONFLICT') {
           Alert.alert(
             getLocalized(localizedText.deviceAlreadyRegistered),
             `${getLocalized(localizedText.premiumRequired)}\n\n(${t.enterId}: ${data?.existingUserId ?? ''})`,
             [
-              { 
-                text: getLocalized(localizedText.goToPurchase), 
-                onPress: () => goPurchase('device_conflict', data?.redirectTo || undefined) 
-              },
+              { text: getLocalized(localizedText.goToPurchase), onPress: () => goPurchase('device_conflict', data?.redirectTo || undefined) },
               { text: getLocalized(localizedText.cancelPurchase), style: 'cancel' },
             ]
           );
@@ -257,16 +252,10 @@ export default function LoginScreen() {
 
         Alert.alert(
           getLocalized(localizedText.trialExpiredTitle),
-          (msg || getLocalized(localizedText.premiumExpiredMessage)) + `\n\n🎫 purchaseToken: ${purchaseToken || '없음'}`,
+          msg || getLocalized(localizedText.premiumExpiredMessage),
           [
             { text: getLocalized(localizedText.cancelPurchase), style: 'cancel' },
-            { 
-              text: getLocalized(localizedText.purchaseNow), 
-              onPress: () => goPurchase(
-                code === 'TRIAL_EXPIRED' ? 'trial_expired' : 'premium_required', 
-                data?.redirectTo || undefined
-              ) 
-            },
+            { text: getLocalized(localizedText.purchaseNow), onPress: () => goPurchase(code === 'TRIAL_EXPIRED' ? 'trial_expired' : 'premium_required', data?.redirectTo || undefined) },
           ]
         );
         return;
@@ -283,7 +272,7 @@ export default function LoginScreen() {
     }
   };
 
-  // ✅ 로그아웃 처리
+  /** ✅ 로그아웃 처리 */
   const handleLogout = async () => {
     try {
       await Promise.all([
@@ -320,7 +309,16 @@ export default function LoginScreen() {
         placeholder={t.enterId}
         placeholderTextColor="#999"
         value={userId}
-        onChangeText={setUserId}
+        onChangeText={(text) => {
+          const filtered = text.replace(/[^a-zA-Z0-9]/g, '');
+          if (text !== filtered) {
+            Alert.alert(
+              getLocalized(localizedText.invalidUserIdTitle),
+              getLocalized(localizedText.invalidUserId)
+            );
+          }
+          setUserId(filtered);
+        }}
         autoCapitalize="none"
         keyboardAppearance="light"
         editable={!isLoggedIn}
