@@ -133,7 +133,7 @@ export default function PurchaseScreen() {
     try {
       const authToken = await AsyncStorage.getItem('authToken');
       const purchaseToken = await AsyncStorage.getItem('purchaseToken');
-      const usedToken = authToken || purchaseToken;
+      const usedToken = purchaseToken || authToken;
 
       console.log('🛒 PurchaseScreen 토큰:', authToken ? 'authToken 있음' : purchaseToken ? 'purchaseToken 있음' : '없음');
       if (!usedToken) return;
