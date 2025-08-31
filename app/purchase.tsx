@@ -25,6 +25,8 @@ const translations: any = {
     manageSubscription: "구독 관리하기",
     alreadySubscribed: "이미 프리미엄 구독 중입니다",
     alreadySubscribedDesc: "이미 해당 상품을 구독 중입니다. 구글 플레이 스토어에서 구독을 관리해주세요.",
+    expire7days: "프리미엄 구독이 7일 후 만료됩니다. 갱신을 잊지 마세요!",
+    expire3days: "⚠️ 프리미엄 구독이 3일 후 만료됩니다. 지금 갱신하세요!",
     desc: {
       sub_premium_3m: "3개월 프리미엄 구독",
       sub_premium_6m: "6개월 프리미엄 구독",
@@ -45,6 +47,8 @@ const translations: any = {
     manageSubscription: "Manage Subscription",
     alreadySubscribed: "Already subscribed to premium",
     alreadySubscribedDesc: "You are already subscribed to this product. Please manage your subscription in Google Play Store.",
+    expire7days: "Your premium subscription will expire in 7 days. Don't forget to renew!",
+    expire3days: "⚠️ Your premium subscription will expire in 3 days. Renew now!",
     desc: {
       sub_premium_3m: "3 months premium subscription",
       sub_premium_6m: "6 months premium subscription",
@@ -65,6 +69,8 @@ const translations: any = {
     manageSubscription: "購読を管理",
     alreadySubscribed: "すでにプレミアム購読中です",
     alreadySubscribedDesc: "すでにこの商品を購読中です。Google Play ストアで購読を管理してください。",
+    expire7days: "プレミアム購読は7日後に終了します。更新をお忘れなく！",
+    expire3days: "⚠️ プレミアム購読は3日後に終了します。今すぐ更新してください！",
     desc: {
       sub_premium_3m: "3か月のプレミアム購読",
       sub_premium_6m: "6か月のプレミアム購読",
@@ -85,6 +91,8 @@ const translations: any = {
     manageSubscription: "管理订阅",
     alreadySubscribed: "已订阅高级版",
     alreadySubscribedDesc: "您已订阅此产品。请在Google Play商店中管理您的订阅。",
+    expire7days: "您的高级订阅将在7天后到期，请记得续订！",
+    expire3days: "⚠️ 您的高级订阅将在3天后到期，请立即续订！",
     desc: {
       sub_premium_3m: "3个月高级订阅",
       sub_premium_6m: "6个月高级订阅",
@@ -105,6 +113,8 @@ const translations: any = {
     manageSubscription: "Quản lý đăng ký",
     alreadySubscribed: "Đã đăng ký gói cao cấp",
     alreadySubscribedDesc: "Bạn đã đăng ký sản phẩm này. Vui lòng quản lý đăng ký trong Google Play Store.",
+    expire7days: "Gói cao cấp của bạn sẽ hết hạn sau 7 ngày. Đừng quên gia hạn!",
+    expire3days: "⚠️ Gói cao cấp sẽ hết hạn sau 3 ngày. Hãy gia hạn ngay!",
     desc: {
       sub_premium_3m: "Đăng ký cao cấp 3 tháng",
       sub_premium_6m: "Đăng ký cao cấp 6 tháng",
@@ -113,6 +123,17 @@ const translations: any = {
   }
 };
 
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, Button, Alert, ScrollView, StyleSheet, Platform, ActivityIndicator, Linking } from 'react-native';
+import * as RNIap from 'react-native-iap';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
+import { API_BASE_URL } from '../lib/api';
+import { useLanguage } from '../hooks/useLanguage';
+
+// ✅ 구독 상품 ID (Google Play Console 기준)
+const productIds = ['sub_premium_3m', 'sub_premium_6m', 'sub_premium_12m'];
+
 export default function PurchaseScreen() {
   const [products, setProducts] = useState<RNIap.Subscription[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -120,41 +141,37 @@ export default function PurchaseScreen() {
   const [currentSubscription, setCurrentSubscription] = useState<string | null>(null);
 
   const router = useRouter();
-  const { language } = useLanguage(); 
-  const t = translations[language] || translations.en;
+  const { language, t } = useLanguage();
 
-  // ✅ 리스너
   const purchaseUpdateSub = useRef<ReturnType<typeof RNIap.purchaseUpdatedListener> | null>(null);
   const purchaseErrorSub = useRef<ReturnType<typeof RNIap.purchaseErrorListener> | null>(null);
   const inFlight = useRef<string | null>(null);
 
-  // ✅ 현재 구독 상태 확인
+  /** ✅ 현재 구독 상태 확인 */
   const checkCurrentSubscription = async () => {
     try {
       const authToken = await AsyncStorage.getItem('authToken');
-      if (!authToken) {
-        console.warn("❌ No authToken when checking subscription");
-        return;
-      }
-
-      console.log('🛒 PurchaseScreen: authToken 있음');
+      if (!authToken) return;
 
       const res = await fetch(`${API_BASE_URL}/api/purchase/status`, {
         headers: { Authorization: `Bearer ${authToken}` }
       });
+      if (!res.ok) return;
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.active) {
-          setCurrentSubscription('active');
-        }
+      const data = await res.json();
+      setCurrentSubscription(data.active ? 'active' : null);
+
+      if (data.active) {
+        await AsyncStorage.setItem('premiumActive', 'true');
+      } else {
+        await AsyncStorage.removeItem('premiumActive');
       }
-    } catch (error) {
-      console.warn('구독 상태 확인 실패:', error);
+    } catch (err) {
+      console.warn("❌ checkCurrentSubscription error:", err);
     }
   };
 
-  // ✅ 결제 완료 → 서버 검증
+  /** ✅ 서버 검증 + 필요시 finishTransaction */
   const verifyAndFinish = async (purchase: RNIap.Purchase) => {
     const tokenStr = purchase.purchaseToken ?? purchase.transactionReceipt ?? '';
     if (!tokenStr) return;
@@ -163,123 +180,93 @@ export default function PurchaseScreen() {
 
     try {
       const authToken = await AsyncStorage.getItem('authToken');
-      if (!authToken) {
-        console.warn("[IAP] No authToken available for verification");
-        return;
-      }
-
-      console.log('[IAP] verify request:', purchase.productId);
+      if (!authToken) return;
 
       const res = await fetch(`${API_BASE_URL}/api/purchase/verify-receipt`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`, // ✅ authToken만 사용
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
         body: JSON.stringify({
           productId: purchase.productId,
           transactionId: purchase.transactionId ?? null,
-          receipt: tokenStr, // ✅ 영수증(purchaseToken)
+          receipt: purchase.purchaseToken,
           platform: Platform.OS,
         }),
       });
 
       const json = await res.json();
-      console.log('[IAP] server response:', json);
+      console.log("🔎 [verifyAndFinish] server response:", json);
 
       if (res.ok && json?.success) {
-        await RNIap.finishTransaction({ purchase, isConsumable: false });
-        
-        if (json.user) {
-          await AsyncStorage.setItem('currentUser', JSON.stringify(json.user));
+        // ✅ 아직 acknowledge되지 않았다면 finishTransaction
+        if (Platform.OS === 'android' && !purchase.isAcknowledgedAndroid) {
+          await RNIap.finishTransaction({ purchase, isConsumable: false });
         }
-        await AsyncStorage.setItem('premiumActive', 'true');
-        await AsyncStorage.setItem('preferredLang', language || 'en');
 
-        // ✅ 새 authToken 교체
+        // ✅ 토큰/유저정보 동기화
         if (json.token) {
           await AsyncStorage.setItem('authToken', json.token);
-          console.log("💾 새 authToken 저장 완료:", json.token);
         }
+        if (json.user) {
+          await AsyncStorage.setItem('currentUser', JSON.stringify({
+            ...json.user,
+            isPremium: true,
+            trialExpired: false,
+          }));
+        }
+        await AsyncStorage.setItem('premiumActive', 'true');
 
-        Alert.alert(t.success, t.purchaseSuccess);
-        
         setCurrentSubscription('active');
-        setTimeout(() => {
-          router.replace('/screens/TopicSelectScreen');
-        }, 1000);
+        Alert.alert(t.success, t.purchaseSuccess);
+
+        setTimeout(() => router.replace('/screens/TopicSelectScreen'), 800);
       } else {
         Alert.alert(t.error, json?.message || t.verifyFail);
-        try { await RNIap.finishTransaction({ purchase, isConsumable: false }); } catch {}
       }
     } catch (e: any) {
-      console.warn('[IAP] verify/finish error:', e);
+      console.warn("❌ verifyAndFinish error:", e);
       Alert.alert(t.error, t.purchaseFail);
-      try { await RNIap.finishTransaction({ purchase, isConsumable: false }); } catch {}
     } finally {
       inFlight.current = null;
       setLoadingPurchase(false);
     }
   };
 
-  // ✅ 상품 로딩
+  /** ✅ 상품 로딩 */
   const loadProducts = async () => {
-    const debugToken = await AsyncStorage.getItem('authToken');
-    if (!debugToken) console.warn("❌ PurchaseScreen 진입 시 authToken 없음");
-
     setLoadingProducts(true);
     try {
       const connected = await RNIap.initConnection();
-      console.log('[IAP] initConnection:', connected);
       if (!connected) throw new Error("IAP init failed");
 
       await RNIap.flushFailedPurchasesCachedAsPendingAndroid();
 
-      const items: RNIap.Subscription[] = await RNIap.getSubscriptions({ skus: productIds });
-      console.log('[IAP] getSubscriptions returned:', items.length);
-
+      const items = await RNIap.getSubscriptions({ skus: productIds });
       const order = ['sub_premium_3m', 'sub_premium_6m', 'sub_premium_12m'];
       items.sort((a, b) => order.indexOf(a.productId) - order.indexOf(b.productId));
       setProducts(items);
 
-      // ✅ 이전 구매 처리
-      try {
-        const availablePurchases = await RNIap.getAvailablePurchases();
-        console.log('[IAP] availablePurchases:', availablePurchases.length);
-        for (const purchase of availablePurchases) {
-          if (purchase.productId && productIds.includes(purchase.productId)) {
-            await verifyAndFinish(purchase);
-          }
+      // ✅ 이전 구매 복원 (finishTransaction은 안 함)
+      const availablePurchases = await RNIap.getAvailablePurchases();
+      for (const p of availablePurchases) {
+        if (p.productId && productIds.includes(p.productId)) {
+          await verifyAndFinish(p); // 서버 동기화만
         }
-      } catch (error) {
-        console.warn('[IAP] available purchases error:', error);
       }
 
-      // ✅ 리스너 등록
+      // ✅ 리스너
       purchaseUpdateSub.current = RNIap.purchaseUpdatedListener(async (purchase) => {
-        console.log('[IAP] purchaseUpdatedListener:', purchase);
+        console.log("📥 purchaseUpdatedListener:", purchase);
         await verifyAndFinish(purchase);
       });
-      
+
       purchaseErrorSub.current = RNIap.purchaseErrorListener((e) => {
-        console.warn('[IAP] purchaseErrorListener:', e);
+        console.warn("❌ purchaseErrorListener:", e);
         if (e.code === 'E_USER_CANCELLED') {
           Alert.alert(t.error, t.purchaseCanceled);
         } else if (e.code === 'E_ALREADY_OWNED') {
-          Alert.alert(
-            t.error, 
-            t.alreadySubscribedDesc,
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  if (Platform.OS === 'android') {
-                    Linking.openURL('https://play.google.com/store/account/subscriptions');
-                  }
-                }
-              }
-            ]
-          );
+          Alert.alert(t.error, t.alreadySubscribedDesc, [
+            { text: 'OK', onPress: () => Linking.openURL('https://play.google.com/store/account/subscriptions') }
+          ]);
         } else {
           Alert.alert(t.error, e?.debugMessage || e?.message || t.purchaseFail);
         }
@@ -287,9 +274,7 @@ export default function PurchaseScreen() {
       });
 
       await checkCurrentSubscription();
-
     } catch (e: any) {
-      console.warn('[IAP] init error:', e);
       Alert.alert(t.error, "IAP init failed: " + e.message);
     } finally {
       setLoadingProducts(false);
@@ -297,91 +282,40 @@ export default function PurchaseScreen() {
   };
 
   useEffect(() => {
-    (async () => {
-      const savedAuthToken = await AsyncStorage.getItem('authToken');
-      console.log("🛒 PurchaseScreen 진입 시 authToken:", savedAuthToken);
-    })();
-
-    const timer = setTimeout(() => {
-      loadProducts();
-    }, 1500);
-
+    loadProducts();
     return () => {
-      clearTimeout(timer);
       try { purchaseUpdateSub.current?.remove(); } catch {}
       try { purchaseErrorSub.current?.remove(); } catch {}
       RNIap.endConnection();
     };
   }, [language]);
 
-  // ✅ 구독 요청
+  /** ✅ 구독 요청 */
   const handlePurchase = async (productId: string) => {
-    console.log('[IAP] handleSubscription start:', productId);
-
     if (currentSubscription === 'active') {
-      Alert.alert(
-        t.alreadySubscribed,
-        t.alreadySubscribedDesc,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              if (Platform.OS === 'android') {
-                Linking.openURL('https://play.google.com/store/account/subscriptions');
-              }
-            }
-          }
-        ]
-      );
+      Alert.alert(t.alreadySubscribed, t.alreadySubscribedDesc, [
+        { text: 'OK', onPress: () => Linking.openURL('https://play.google.com/store/account/subscriptions') }
+      ]);
       return;
     }
 
     setLoadingPurchase(true);
     try {
-      const product = products.find(p => p.productId === productId);
-      console.log('[IAP] selected product:', JSON.stringify(product, null, 2));
-
-      const androidProduct = product as RNIap.SubscriptionAndroid;
-      const offer = androidProduct.subscriptionOfferDetails?.find((o: any) =>
-        o.offerId?.includes('basic') || o.offerTags?.includes('subscription')
-      );
+      const product = products.find(p => p.productId === productId) as RNIap.SubscriptionAndroid;
+      const offer = product.subscriptionOfferDetails?.[0];
       const offerToken = offer?.offerToken;
-
-      if (!offerToken) {
-        Alert.alert(t.error, t.verifyFail + " (구독 혜택이 콘솔에 설정되지 않았습니다.)");
-        setLoadingPurchase(false);
-        return;
-      }
+      if (!offerToken) throw new Error("No offerToken (구글 콘솔 설정 확인)");
 
       await RNIap.requestSubscription({
         sku: productId,
-        subscriptionOffers: [
-          {
-            sku: productId,
-            offerToken: offerToken,
-          },
-        ],
+        subscriptionOffers: [{ sku: productId, offerToken }],
         andDangerouslyFinishTransactionAutomatically: false,
       } as any);
-      console.log('[IAP] requestSubscription sent:', productId, offerToken);
-
     } catch (err: any) {
-      console.warn('[IAP] request error:', err);
       if (err.code === 'E_ALREADY_OWNED') {
-        Alert.alert(
-          t.alreadySubscribed,
-          t.alreadySubscribedDesc,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                if (Platform.OS === 'android') {
-                  Linking.openURL('https://play.google.com/store/account/subscriptions');
-                }
-              }
-            }
-          ]
-        );
+        Alert.alert(t.alreadySubscribed, t.alreadySubscribedDesc, [
+          { text: 'OK', onPress: () => Linking.openURL('https://play.google.com/store/account/subscriptions') }
+        ]);
       } else {
         Alert.alert(t.error, err?.message || t.purchaseFail);
       }
@@ -393,8 +327,8 @@ export default function PurchaseScreen() {
     <View key={p.productId} style={styles.productCard}>
       <Text style={styles.productTitle}>{t.desc[p.productId]}</Text>
       <Text style={styles.productPrice}>{(p as any).localizedPrice}</Text>
-      <Button 
-        title={t.buyNow} 
+      <Button
+        title={t.buyNow}
         onPress={() => handlePurchase(p.productId)}
         disabled={currentSubscription === 'active' || loadingPurchase}
       />
@@ -404,18 +338,11 @@ export default function PurchaseScreen() {
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>🛒 {t.premiumMembership}</Text>
-      
+
       {currentSubscription === 'active' && (
         <View style={styles.activeSubscription}>
           <Text style={styles.activeText}>✅ {t.alreadySubscribed}</Text>
-          <Button
-            title={t.manageSubscription}
-            onPress={() => {
-              if (Platform.OS === 'android') {
-                Linking.openURL('https://play.google.com/store/account/subscriptions');
-              }
-            }}
-          />
+          <Button title={t.manageSubscription} onPress={() => Linking.openURL('https://play.google.com/store/account/subscriptions')} />
         </View>
       )}
 
@@ -427,9 +354,7 @@ export default function PurchaseScreen() {
       ) : (
         <>
           {products.map(renderProduct)}
-          {products.length === 0 && (
-            <Text>{t.noProductsAvailable}</Text>
-          )}
+          {products.length === 0 && <Text>{t.noProductsAvailable}</Text>}
           {loadingPurchase && (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#007AFF" />
@@ -449,12 +374,6 @@ const styles = StyleSheet.create({
   productTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
   productPrice: { fontSize: 16, color: '#007AFF', marginBottom: 8 },
   loadingContainer: { alignItems: 'center', justifyContent: 'center', padding: 20 },
-  activeSubscription: { 
-    backgroundColor: '#E8F5E8', 
-    padding: 16, 
-    borderRadius: 8, 
-    marginBottom: 20,
-    alignItems: 'center'
-  },
+  activeSubscription: { backgroundColor: '#E8F5E8', padding: 16, borderRadius: 8, marginBottom: 20, alignItems: 'center' },
   activeText: { fontSize: 16, color: '#2E7D32', marginBottom: 10 }
 });

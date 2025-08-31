@@ -137,6 +137,13 @@ export default function LoginScreen() {
       ja: '無効なユーザーID',
       vi: 'ID không hợp lệ',
     },
+    sessionConflict: {
+      ko: '다른 기기에서 로그인되어 세션이 만료되었습니다.',
+      en: 'Logged in on another device. Session expired.',
+      zh: '已在其他设备登录，当前会话已过期。',
+      ja: '別のデバイスでログインされ、セッションが終了しました。',
+      vi: 'Đã đăng nhập trên thiết bị khác. Phiên này đã hết hạn.',
+    },
   };
 
   const getLocalized = (obj: Record<string, string>): string => {
@@ -175,7 +182,7 @@ export default function LoginScreen() {
       });
 
       console.log("✅ 로그인 응답 전체:", response.data);
-      const { token, user, premiumRequired, redirectTo } = response.data;
+      const { token, user, premiumRequired, reason } = response.data;
 
       const uid = user.userId || user.id;
       setUserId(uid);
@@ -199,26 +206,51 @@ export default function LoginScreen() {
         await AsyncStorage.removeItem('rememberedUserId');
       }
 
+      // ✅ premiumActive 동기화 추가
+      if (user.isPremium) {
+        await AsyncStorage.setItem('premiumActive', 'true');
+      } else {
+        await AsyncStorage.removeItem('premiumActive');
+      }
+
       const trialExpired = user.trialExpired ?? false;
       const isPremium = user.isPremium ?? false;
       const isAdmin = user.isAdmin ?? false;
 
       setIsLoggedIn(true);
 
-      if (isAdmin || isPremium || !trialExpired) {
+      if (premiumRequired) {
+        if (reason === 'trial_expired') {
+          Alert.alert(
+            getLocalized(localizedText.trialExpiredTitle),
+            getLocalized(localizedText.premiumExpiredMessage),
+            [
+              { text: getLocalized(localizedText.cancelPurchase), style: 'cancel' },
+              { text: getLocalized(localizedText.purchaseNow), onPress: () => goPurchase('trial_expired') },
+            ]
+          );
+          return;
+        }
+        if (reason === 'device_conflict') {
+          Alert.alert(
+            getLocalized(localizedText.deviceAlreadyRegistered),
+            getLocalized(localizedText.premiumRequired),
+            [
+              { text: getLocalized(localizedText.goToPurchase), onPress: () => goPurchase('device_conflict') },
+              { text: getLocalized(localizedText.cancelPurchase), style: 'cancel' },
+            ]
+          );
+          return;
+        }
+      }
+
+      if (isAdmin || isPremium) {
         router.replace('/screens/TopicSelectScreen');
         return;
       }
 
-      if (premiumRequired) {
-        Alert.alert(
-          getLocalized(localizedText.trialExpiredTitle),
-          getLocalized(localizedText.premiumExpiredMessage),
-          [
-            { text: getLocalized(localizedText.cancelPurchase), style: 'cancel' },
-            { text: getLocalized(localizedText.purchaseNow), onPress: () => goPurchase('premium_required', redirectTo) },
-          ]
-        );
+      if (!trialExpired) {
+        router.replace('/screens/TopicSelectScreen');
         return;
       }
 
@@ -236,6 +268,13 @@ export default function LoginScreen() {
       const data = error?.response?.data || {};
       const code: string = data?.code || '';
       const msg: string | undefined = data?.message;
+
+      if (status === 401 && msg && (msg.includes('세션') || msg.includes('Session'))) {
+        Alert.alert(getLocalized(localizedText.sessionConflict));
+        await handleLogout();
+        router.replace('/login');
+        return;
+      }
 
       if (status === 403 && (code === 'DEVICE_CONFLICT' || code === 'TRIAL_EXPIRED' || code === 'PREMIUM_REQUIRED')) {
         if (code === 'DEVICE_CONFLICT') {

@@ -18,36 +18,46 @@ const translations = {
   ko: {
     trialDays: (d: string) => `잔여체험일: ${d}`,
     premiumDays: (d: string) => `잔여사용일수: ${d}`,
+    expired: "만료",
+    daysSuffix: "일",
     backToLogin: '로그인으로 돌아가기',
     title: '- 콘텐츠 -',
   },
   en: {
     trialDays: (d: string) => `Trial days left: ${d}`,
     premiumDays: (d: string) => `Subscription left: ${d}`,
+    expired: "Expired",
+    daysSuffix: "days",
     backToLogin: 'Back to Login',
     title: '- Contents -',
   },
   zh: {
     trialDays: (d: string) => `剩余体验天数: ${d}`,
     premiumDays: (d: string) => `订阅剩余天数: ${d}`,
+    expired: "已过期",
+    daysSuffix: "天",
     backToLogin: '返回登录',
     title: '- 内容 -',
   },
   ja: {
     trialDays: (d: string) => `体験残り日数: ${d}`,
     premiumDays: (d: string) => `有効日数: ${d}`,
+    expired: "期限切れ",
+    daysSuffix: "日",
     backToLogin: 'ログインに戻る',
     title: '- コンテンツ -',
   },
   vi: {
     trialDays: (d: string) => `Ngày dùng thử còn lại: ${d}`,
     premiumDays: (d: string) => `Ngày sử dụng còn lại: ${d}`,
+    expired: "Hết hạn",
+    daysSuffix: "ngày",
     backToLogin: 'Quay lại đăng nhập',
     title: '- Nội dung -',
   },
 };
 
-function calculateTrialDaysLeft(startStr?: string): string {
+function calculateTrialDaysLeft(startStr?: string, t?: any): string {
   if (!startStr) return '-';
   try {
     const safeStr = startStr.replace(' ', 'T');
@@ -57,23 +67,24 @@ function calculateTrialDaysLeft(startStr?: string): string {
     const now = new Date();
     const end = new Date(start.getTime() + 3 * 86400000);
     const diffDays = Math.ceil((end.getTime() - now.getTime()) / 86400000);
-    return diffDays > 0 ? `${diffDays}일` : '만료';
+
+    return diffDays > 0 ? `${diffDays}${t.daysSuffix}` : t.expired;
   } catch {
     return '-';
   }
 }
 
-function calculatePremiumDaysLeft(endStr?: string): string {
+function calculatePremiumDaysLeft(endStr?: string, t?: any): string {
   if (!endStr || endStr === 'null') return '-';
   const end = new Date(endStr);
   if (isNaN(end.getTime())) return '-';
 
   const now = new Date();
   const diffDays = Math.ceil((end.getTime() - now.getTime()) / 86400000);
-  if (diffDays <= 0) return '만료';
-  if (diffDays <= 92) return `${diffDays}일 (3개월권)`;
-  if (diffDays <= 186) return `${diffDays}일 (6개월권)`;
-  return `${diffDays}일 (1년권)`;
+  if (diffDays <= 0) return t.expired;
+  if (diffDays <= 92) return `${diffDays}${t.daysSuffix} (3개월권)`;
+  if (diffDays <= 186) return `${diffDays}${t.daysSuffix} (6개월권)`;
+  return `${diffDays}${t.daysSuffix} (1년권)`;
 }
 
 export default function TopicSelectScreen() {
