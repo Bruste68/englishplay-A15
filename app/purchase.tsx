@@ -123,17 +123,6 @@ const translations: any = {
   }
 };
 
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Button, Alert, ScrollView, StyleSheet, Platform, ActivityIndicator, Linking } from 'react-native';
-import * as RNIap from 'react-native-iap';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
-import { API_BASE_URL } from '../lib/api';
-import { useLanguage } from '../hooks/useLanguage';
-
-// ✅ 구독 상품 ID (Google Play Console 기준)
-const productIds = ['sub_premium_3m', 'sub_premium_6m', 'sub_premium_12m'];
-
 export default function PurchaseScreen() {
   const [products, setProducts] = useState<RNIap.Subscription[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
