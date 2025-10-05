@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "338940621434",
+    "project_id": "englishplayondevice",
+    "storage_bucket": "englishplayondevice.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:338940621434:android:7a2afcc75b2583f6ea01c3",
+        "android_client_info": {
+          "package_name": "com.bruste68.englishplayondevice.play"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "338940621434-r2dighprq3ss3gt8tha49v3n0e220530.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.bruste68.englishplayondevice.play",
+            "certificate_hash": "fe41142ecf66ee24e8166bfe25fbd01631a38da7"
+          }
+        },
+        {
+          "client_id": "338940621434-bl72llh7n64j32em6nfj5i2v1b7nng3r.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC2VGmp2FpMZKifHa4HI4q24sax_5CIjPo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "338940621434-bl72llh7n64j32em6nfj5i2v1b7nng3r.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

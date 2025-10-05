@@ -1,0 +1,29 @@
+diff --git a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/devsupport/DevSupportManagerBase.java b/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/devsupport/DevSupportManagerBase.java
+index e3094c7..f79fc68 100644
+--- a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/devsupport/DevSupportManagerBase.java
++++ b/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/devsupport/DevSupportManagerBase.java
+@@ -1130,13 +1130,15 @@ public abstract class DevSupportManagerBase implements DevSupportManager {
+    * <p>https://developer.android.com/about/versions/14/behavior-changes-14#runtime-receivers-exported
+    */
+   private void compatRegisterReceiver(
+-      Context context, BroadcastReceiver receiver, IntentFilter filter, boolean exported) {
+-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+-        && context.getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+-      context.registerReceiver(
+-          receiver, filter, exported ? Context.RECEIVER_EXPORTED : Context.RECEIVER_NOT_EXPORTED);
+-    } else {
+-      context.registerReceiver(receiver, filter);
+-    }
+-  }
++       Context context, BroadcastReceiver receiver, IntentFilter filter, boolean exported) {
++     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
++         && context.getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
++       context.registerReceiver(
++           receiver, filter, exported ? Context.RECEIVER_EXPORTED : Context.RECEIVER_NOT_EXPORTED);
++     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
++       context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
++     } else {
++       context.registerReceiver(receiver, filter);
++     }
++   }
+ }
