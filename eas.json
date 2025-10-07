@@ -6,9 +6,7 @@
   "build": {
     "preview": {
       "developmentClient": true,
-      "distribution": "internal",
       "android": {
-        "gradleCommand": ":app:assemblePlayDebug",   // ✅ flavor 지정
         "buildType": "apk"
       },
       "node": "22.16.0",
@@ -22,9 +20,7 @@
     },
     "production": {
       "developmentClient": false,
-      "distribution": "store",                // ✅ Google Play 업로드용
       "android": {
-        "gradleCommand": ":app:bundlePlayRelease",   // ✅ flavor 지정
         "buildType": "app-bundle",
         "ndk": "25.1.8937393"
       },
