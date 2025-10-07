@@ -8,8 +8,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "android": {
-        "buildType": "apk",
-        "flavor": "playDebug"
+        "gradleCommand": ":app:assemblePlayDebug",   // ✅ flavor 지정
+        "buildType": "apk"
       },
       "node": "22.16.0",
       "env": {
@@ -24,7 +24,8 @@
       "developmentClient": false,
       "distribution": "store",                // ✅ Google Play 업로드용
       "android": {
-        "buildType": "app-bundle",           // ✅ .aab (Play 콘솔 전용)
+        "gradleCommand": ":app:bundlePlayRelease",   // ✅ flavor 지정
+        "buildType": "app-bundle",
         "ndk": "25.1.8937393"
       },
       "node": "22.16.0",
