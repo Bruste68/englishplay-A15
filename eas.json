@@ -8,32 +8,34 @@
       "developmentClient": true,
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "flavor": "playDebug"
       },
       "node": "22.16.0",
       "env": {
         "EXPO_FLAVOR": "playDebug",
         "EXPO_PUBLIC_BACKEND_URL": "https://samspeakgo.com/api",
-        "EXPO_PUBLIC_WHISPER_URL": "https://samspeakgo.com/api",
+        "EXPO_PUBLIC_WHISPER_URL": "https://samspeakgo.com/api/transcribe",
         "ENV": "development",
         "BUILD_ENV": "debug"
       }
     },
     "production": {
       "developmentClient": false,
+      "distribution": "store",                // ✅ Google Play 업로드용
       "android": {
-        "ndk": "25.1.8937393",
-        "buildType": "app-bundle"
+        "flavor": "play",                    // ✅ Google Play flavor 지정
+        "buildType": "app-bundle",           // ✅ .aab (Play 콘솔 전용)
+        "gradleCommand": ":app:bundleRelease",
+        "ndk": "25.1.8937393"
       },
       "node": "22.16.0",
       "env": {
         "EXPO_FLAVOR": "play",
         "EXPO_DEV_LAUNCHER_DISABLED": "true",
         "EXPO_DEV_MENU_DISABLED": "true",
-        "EXPO_DEV_LAUNCHER_ENABLED": "false",
-        "EXPO_DEV_MENU_ENABLED": "false",
         "EXPO_PUBLIC_BACKEND_URL": "https://samspeakgo.com/api",
-        "EXPO_PUBLIC_WHISPER_URL": "https://samspeakgo.com/api",
+        "EXPO_PUBLIC_WHISPER_URL": "https://samspeakgo.com/api/transcribe",
         "EXPO_ANDROID_MIN_SDK_VERSION": "24",
         "ENV": "production",
         "BUILD_ENV": "release"
