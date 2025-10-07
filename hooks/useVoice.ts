@@ -16,13 +16,6 @@ async function transcribeAudio(uri: string, lang = 'en'): Promise<string> {
     console.log('🎯 Whisper 전송 URL:', `${WHISPER_API_URL}/transcribe`);
     console.log('🎧 Whisper 전송 파일 URI:', uri);
 
-    // 🔎 파일 존재 확인 (개발환경에서는 특히 중요)
-    const fileInfo = await FileSystem.getInfoAsync(uri);
-    if (!fileInfo.exists) {
-      console.warn('⚠️ [WHISPER] 파일이 존재하지 않습니다:', uri);
-      return '__FILE_NOT_FOUND__';
-    }
-
     const formData = new FormData();
     formData.append('file', {
       uri,

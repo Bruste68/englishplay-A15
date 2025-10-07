@@ -260,6 +260,12 @@ function ChatScreen() {
       return;
     }
 
+    // handlePracticeEnd or flushProgress 호출 전
+    if (!topicKey || !currentLevel || !currentScene?.code) {
+      console.warn('⚠️ [FLUSH BLOCKED] Missing topic/level/scene info → skip flushProgress');
+      return;
+    }
+
     if (isSavingRef.current) {
      console.log("⏸️ [SKIP] handlePracticeEnd already running");
       return;
@@ -384,6 +390,15 @@ function ChatScreen() {
       </SafeAreaView>
     );
   }
+
+  useEffect(() => {
+    if (!topicKey || !currentLevel) return;
+    if (isMemorizationMode) return; // 추가
+
+    console.log('🔄 [RESET] topic 또는 level 변경 감지됨 → 상태 초기화');
+    practice.resetAllStates?.();
+  }, [topicKey, currentLevel]);
+
 
   useEffect(() => {
     if (voiceError) {

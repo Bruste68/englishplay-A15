@@ -236,13 +236,17 @@ export const PracticeDialogView = forwardRef<
     stopRecording();
     Speech.stop();
 
-    const newState = { ...DEFAULT_STATE }; // isActive: false
-
+    const newState = {
+      ...DEFAULT_STATE,
+      isActive: true,
+    };
     practice?.setSceneIndex?.(nextIndex);
     practice?.setDialogState?.(newState);
 
     if (scenes[nextIndex]?.dialogues?.length > 0) {
-      setHasStartedPractice?.(false); // ▶ 다시 눌러야 시작
+      setTimeout(() => {
+        practice?.processDialogWithState?.(newState);
+      }, 500);
     }
   };
 
@@ -261,31 +265,31 @@ export const PracticeDialogView = forwardRef<
       return;
     }
 
-    if (dialogState.step === 0 && dialogState.isActive && !dialogState.isUserTurn) {
-      console.log('[FIX] STEP 0인데 isUserTurn false → AI 먼저 대사 처리');
+    // 1️⃣ 첫 발화: AI 먼저 시작해야 할 때
+    if (dialogState.step === 0 && !dialogState.isUserTurn) {
+      console.log('🧭 [AUTO] 첫 AI 대사 → processDialogWithState');
       practice?.processDialogWithState?.(dialogState);
       return;
     }
-    if (dialogState.step === 0 && !dialogState.isUserTurn) {
-      console.log('🛑 [AUTO-BLOCK] 초기 상태, 자동 흐름 차단');
-      return;
+
+    // 2️⃣ 역할 변경 후 첫 사용자 턴 (AI → User)
+    if (dialogState.isUserTurn) {
+      console.log('🎤 [AUTO] 사용자 턴 감지됨');
+      // 암기모드에서는 녹음 없이도 대사 흐름 유지
+      if (isMemorizationMode) {
+        console.log('🧠 [MEMO AUTO] 사용자 턴에서 녹음 건너뜀 → 다음 턴 예약');
+        setTimeout(() => {
+          const st = { ...dialogState, isUserTurn: false };
+          practice?.processDialogWithState?.(st);
+        }, 1500); // 1.5초 후 자동 진행
+      }
+      return; // 사용자 턴에서는 직접 발화 기다림
     }
 
-    console.log('🔁 [AUTO] Triggering next line from useEffect');
+    // 3️⃣ AI 턴이면 계속 진행
+    console.log('🔁 [AUTO] AI 턴 → 다음 대사로 진행');
     practice?.processDialogWithState?.(dialogState);
 
-    setTimeout(() => {
-      if (
-        practice?.dialogState?.isActive &&
-        !practice?.dialogState?.isSpeaking &&
-        !practice?.dialogState?.isPaused &&
-        !isRecording &&                         // 🔑 녹음 중엔 재시도 금지
-        dialogState?.isUserTurn === false       // 🔑 사용자 턴엔 자동 진행 금지
-      ) {
-        console.log('🔁 [SAFE RETRY] Retrying auto trigger');
-        practice?.processDialogWithState?.(practice.dialogState);
-      }
-    }, 150);
   }, [
     practice,
     scenes,
@@ -296,6 +300,7 @@ export const PracticeDialogView = forwardRef<
     dialogState.isActive,
     dialogState.isPaused,
     dialogState.isSpeaking,
+    dialogState.isUserTurn,
     hasStartedPractice,
   ]);
 
@@ -308,74 +313,112 @@ export const PracticeDialogView = forwardRef<
 
   const handleStartMemorization = () => {
     if (!practice) return;
-    console.log('[START MEMO] practiceMode:', practiceMode);
 
-    const initialUserTurn = practice?.isRoleReversed ? true : false;
-    setHasStartedPractice?.(true);
-    practice?.setDialogState?.({
-      ...DEFAULT_STATE,
-      isUserTurn: initialUserTurn,
-      isActive: true,
+    const prevState = practice?.dialogState ?? DEFAULT_STATE; 
+    const userTurnNow = !!(practice?.dialogState?.isUserTurn);
+    console.log('[START MEMO]', {
+      isRoleReversed,
+      practiceMode,
+      step: prevState.step,
+      userTurnNow,
     });
 
-    // ✅ 학습 시작 기록 추가
-    startProgress(
-      topicKey,
-      currentScene?.code ?? null, 
-      currentLevel
-    );
+    try { Speech.stop(); } catch {}
+
+    // ✅ 사용자 턴일 때 Whisper abort 생략 (무음 방지)
+    if (!userTurnNow) {
+      stopAllRecordingLogic?.();   // 내부에서 stopRecording 호출 → 서버 업로드 전 로컬만 정리
+      stopAll?.();                 // (만약 내부에서 다시 stopRecording 호출한다면 제거해도 무방)
+      abortWhisper?.();
+      clearTranscript();
+    } else {
+      console.log('🧠 [MEMO MODE] User turn active → skip Whisper abort');
+    }
+
+    // 🔁 항상 완전 초기화 후 모드 진입
+    setShowFullScript(false);
+    setIsMemorizationMode(true);
+
+    // ✅ dialogState 강제 활성화 및 pause 방지
+    const baseState = {
+      ...DEFAULT_STATE,
+      step: prevState.step ?? 0,
+      isActive: true,
+      isPaused: false,
+      isSpeaking: false,
+      isUserTurn: prevState.isUserTurn ?? false,
+    };
+
+    practice?.setDialogState?.(baseState);
+
+    // ✅ 연습 모드가 꺼져 있으면 강제 ON
+    if (!practice?.practiceMode) {
+      console.log('🔄 [MODE FIX] Enabling practice mode before memorization');
+      practice?.togglePracticeMode?.();
+    }
+
+    // ✅ practiceMode 강제 ON (직접 암기 진입 대비)
+  //  if (!practice?.practiceMode) {
+  //    practice?.togglePracticeMode?.();
+   // }
+
+    // ✅ 처음 시작 기록
+    if (!hasStartedPractice) {
+      setHasStartedPractice?.(true);
+      startProgress(topicKey, currentScene?.code ?? null, currentLevel);
+    }
+
+    // ✅ 첫 진입 시 첫 대사 강제 트리거 (중복 방지 플래그)
+    setTimeout(() => {
+      const st = practice?.dialogState ?? baseState;
+
+      if (st.step === 0 && !userTurnNow) {
+        console.log('🚀 [MEMO FIX] Direct memorization start → trigger first AI line');
+        const initState = {
+          ...baseState,
+          isActive: true,
+          isPaused: false,
+          isUserTurn: false,
+        };
+        practice?.setDialogState?.(initState);
+        practice?.processDialogWithState?.(initState);
+        return;
+      }
+
+      // 🔁 일반 상황 (중간 단계에서 암기모드 진입)
+      if (st.isActive && !st.isPaused && !st.isSpeaking) {
+        console.log('▶️ [MEMO RESUME] Continue dialog flow');
+        practice?.processDialogWithState?.(st);
+      }
+    }, 300);
   };
 
   const handleBackToNormalMode = async () => {
+    console.log('[BACK NORMAL] Returning to script mode');
+
     stopAllRecordingLogic();
+    stopAll();
+    Speech.stop();
+    abortWhisper?.();
+    clearTranscript();
 
-    try {
-      practice?.setDialogState?.({
-        ...(practice?.dialogState ?? DEFAULT_STATE),
-        isActive: false,
-        isPaused: true,
-      });
+    setShowFullScript(true);
+    setIsMemorizationMode(false);
 
-      practice?.setDialogState?.({
-        ...DEFAULT_STATE,
-      });
+    // 현재 state를 보존하면서 안전 플래그만 정리
+    const preserved = {
+       ...(practice?.dialogState ?? DEFAULT_STATE),
+       isActive: true,
+       isPaused: false,
+       isSpeaking: false,
+       isUserTurn: nextIsUserTurn,
+    };
 
-      stopAll();
-      if (Speech && typeof Speech.stop === 'function') {
-        await Speech.stop();
-      }
+    setTimeout(() => {
+      practice?.setDialogState?.(preserved);
+    }, 100);
 
-      if (isRecording) {
-        console.log('🛑 [뒤로가기] 녹음 중 → 중단');
-        try {
-          await stopRecording();
-        } catch (err) {
-          console.warn('⚠️ stopRecording 중복 호출 무시:', (err as any)?.message || err);
-        }
-      }
-
-      if (typeof abortWhisper === 'function') {
-        abortWhisper();
-        console.log('🛑 [뒤로가기] Whisper 요청 중단');
-      }
-
-      clearTranscript();
-
-      if (practiceMode && messages.length > 0 && typeof onPracticeEnd === 'function') {
-        console.log('📩 [FEEDBACK] Triggering feedback generation');
-        onPracticeEnd();
-      }
-
-      practice?.setDialogState?.({ ...DEFAULT_STATE });
-      setShowFullScript(true);
-      setIsMemorizationMode(false);
-
-      setTimeout(() => {
-        if (practiceMode) practice?.togglePracticeMode?.();
-      }, 200);
-    } catch (error) {
-      console.error('Error in handleBackToNormalMode:', error);
-    }
+    console.log('✅ [MODE] Script mode resumed (reset done)');
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
@@ -511,12 +554,6 @@ export const PracticeDialogView = forwardRef<
             key={level}
             style={[levelStyles.levelButton, currentLevel === level && levelStyles.levelButtonActive]}
             onPress={() => {
-              if (dialogState.isSpeaking || dialogState.isActive) {
-                Alert.alert('On talking', 'Conversation is currently in progress. Please press the exit button first.', [
-                  { text: 'Confirm' },
-                ]);
-                return;
-              }
               const isSame = selectedLevel === level;
               setSelectedLevel(isSame ? null : level);
               setCurrentLevel(level);
@@ -562,8 +599,12 @@ export const PracticeDialogView = forwardRef<
                   key={index}
                   onPress={() => {
                     practice?.setSceneIndex?.(index);
-                    practice?.setDialogState?.({ ...DEFAULT_STATE }); // isActive: false 유지
-                    setHasStartedPractice?.(false);
+                    practice?.setDialogState?.({
+                      ...DEFAULT_STATE,
+                      isActive: false,   // 👈 대화 시작 안함
+                      isPaused: true,
+                    });
+
                     setShowFullScript(true);
                     setIsMemorizationMode(false);
                     setSelectedLevel(null);
@@ -610,17 +651,14 @@ export const PracticeDialogView = forwardRef<
           { marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
         ]}
         onPress={() => {
-          const next = !showFullScript;
-          setShowFullScript(next);
-          // 보기만 바꾸되, 숨기기 상태에서는 암기모드 뷰를 쓰도록 플래그 동기화
-          if (typeof setIsMemorizationMode === 'function') {
-            setIsMemorizationMode(!next ? true : false);
+          if (showFullScript) {
+            // 대본 → 암기
+            handleStartMemorization(); // 내부에서 setShowFullScript(false)와 안전 정리 수행
+          } else {
+            // 암기 → 대본
+            handleBackToNormalMode(); // 내부에서 setShowFullScript(true)와 안전 정리 수행
           }
-          // 흐름(시작/정지)에는 절대 개입하지 않음
         }}
-
-
-
       >
         <Image
           source={
@@ -718,14 +756,47 @@ export const PracticeDialogView = forwardRef<
             <View style={styles.buttonWrapper}>
               <TouchableOpacity
                  onPress={() => {
-                   practice?.togglePracticeMode();
-                   setHasStartedPractice?.(true);
-                   // ✅ 학습 시작 기록 추가
-                   startProgress(
-                      topicKey,
-                      currentScene?.code ?? null,
-                      currentLevel
-                   );
+                    console.log('▶️ [PLAY] User manually started practice');
+
+                    // ✅ 역할 반전 여부에 따라 시작 턴 결정
+                   const startAsUser = !!isRoleReversed;
+
+                    // ✅ 모드 ON
+                    if (!practice?.practiceMode) {
+                    practice?.togglePracticeMode?.();
+                    console.log('🔄 [MODE] Practice mode enabled by Play button');
+                    }
+
+                    // ✅ dialogState 설정
+                    practice?.setDialogState?.({
+                       ...DEFAULT_STATE,
+                       isActive: true,
+                       isPaused: false,
+                       isSpeaking: false,
+                       isUserTurn: startAsUser,  // ✅ 반전 역할 대응
+                    });
+ 
+                    // ✅ 학습 시작 기록
+                    setHasStartedPractice?.(true);
+                    startProgress(topicKey, currentScene?.code ?? null, currentLevel);
+
+                    // ✅ 시작 턴이 사용자면 녹음부터 시작
+                    if (startAsUser) {
+                       console.log('🎤 [START] 사용자부터 시작 - 자동 녹음');
+                       // 암기모드 아님 + 자동 녹음 가능 시
+                       if (practice?.startAutoRecording) {
+                          practice.startAutoRecording();
+                       }
+                    } else {
+                       console.log('🤖 [START] AI부터 시작 - 대사 실행');
+                       setTimeout(() => {
+                          practice?.processDialogWithState?.({
+                             ...DEFAULT_STATE,
+                             isActive: true,
+                             isUserTurn: false,
+                          });
+                       }, 200);
+                    }
                  }}
               >
                 <Image

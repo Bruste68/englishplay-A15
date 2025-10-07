@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
+import { Alert } from 'react-native';
 import { allDialogs } from '../constants/templateDialogs';
 import { playBell } from '../utils/playBell';
 import type { TopicType, LevelType } from '../types';
+import { useVoice } from '../hooks/useVoice';
 
 interface PracticeDialogHook {
   topicKey: TopicType;
@@ -46,13 +48,14 @@ export function usePracticeDialog(props: PracticeDialogHook) {
     setLocalMessages,
     startAutoRecording,
     isRecording,
-    stopRecording,
     userResponseDelay = 5,
     onPracticeEnd, // ✅ 여기서 안전하게 분리해서 사용
     audioUri,  // props에서 audioUri 추출
   } = props;
 
   const [sceneIndex, setSceneIndex] = useState(0);
+  const { stopRecording: voiceStopRecording, abortWhisper }  = useVoice(); // 모드전환추가
+
   const [dialogState, setDialogState] = useState<DialogState>({
     step: 0,
     isUserTurn: false,
@@ -71,6 +74,7 @@ export function usePracticeDialog(props: PracticeDialogHook) {
   const dialogStateRef = useRef(dialogState);
   const roleToggleCount = useRef(0);
   const waitForUserAckRef = useRef(false);
+  const autoTriggerRef = useRef<NodeJS.Timeout | null>(null);
 
   const scenes = useMemo(() => {
     console.log(`📚 [DIALOG] Loading scenes for ${topicKey} - ${currentLevel}`);
@@ -82,11 +86,71 @@ export function usePracticeDialog(props: PracticeDialogHook) {
     }));
   }, [topicKey, currentLevel]);
 
+  // ✅ 모드 전환 감지 시 방어
+  const handleModeChangeWhileActive = useCallback(() => {
+    if (dialogState.isActive) {
+      console.log("⚠️ [MODE] Mode change detected during active dialog → pause");
+      voiceStopRecording();
+      abortWhisper();
+      clearTimeout(autoTriggerRef.current ?? undefined);
+
+      setDialogState(prev => ({ ...prev, isActive: false, isPaused: true }));
+      waitForUserAckRef.current = true;
+
+      Alert.alert(
+        "연습 중입니다",
+        "지금은 연습중입니다. 대화를 마치고 모드 전환해주세요.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              console.log("▶️ [WAIT-ACK] Resuming after user confirmation");
+              waitForUserAckRef.current = false;
+
+              // ✅ 완전한 재개 (기존 WAIT 상태 해제 + 프로세스 재시작)
+              setDialogState(prev => ({
+                ...prev,
+                isActive: true,
+                isPaused: false,
+              }));
+              processDialogWithState();
+            },
+          },
+        ],
+        { cancelable: false }
+      );
+    }
+  }, [dialogState.isActive]);
+
+  // ✅ 역할 변경 시 완전 초기화
+  const handleRoleReverse = useCallback(async () => {
+    console.log("🔄 [ROLE] Reversing role – clearing active states");
+    try {
+      await voiceStopRecording();
+      abortWhisper();
+      if (autoTriggerRef.current) {
+        clearTimeout(autoTriggerRef.current);
+      }
+    } catch (err) {
+      console.warn("⚠️ [ROLE-RESET] cleanup error:", err);
+    }
+
+    waitForUserAckRef.current = false;
+    setDialogState({
+      step: 0,
+      isUserTurn: false,
+      isActive: false,
+      isPaused: false,
+      loadingSummary: false,
+      isSpeaking: false,
+    });
+  }, []);
+
   /** Alert 직후 대화 일시정지 */
   const pauseForUserAck = async () => {
     waitForUserAckRef.current = true;
     try {
-      await stopRecording?.();
+      await voiceStopRecording?.();
       if (Speech && typeof Speech.stop === 'function') {
         await Speech.stop();
       }
@@ -141,8 +205,19 @@ export function usePracticeDialog(props: PracticeDialogHook) {
       loadingSummary: false,
     };
     setDialogState(initialState);
-
-    console.log(`🟢 [READY] Practice mode set to ${newMode}. No auto-start here.`);
+    if (newMode) {
+      if (isRoleReversed) {
+        console.log('🎤 [START] 사용자부터 시작 - 자동 녹음');
+        setTimeout(() => {
+          startAutoRecording(userResponseDelay * 1000);
+        }, 1000);
+      } else {
+        console.log('🤖 [START] AI부터 시작 - 대사 실행');
+        setTimeout(() => {
+          processDialogWithState();
+        }, 500);
+      }
+    }
   };
 
   const toggleRole = async () => {
@@ -184,11 +259,11 @@ export function usePracticeDialog(props: PracticeDialogHook) {
        console.log(`🔄 [ROLE] Role reversed: ${newRoleReversed}`);
 
        // 모든 음성 활동 정지
-       await stopRecording();
+       await voiceStopRecording();
        await Speech.stop();
 
        // 상태 초기화
-       const initialStateBase = {
+       const initialState = {
          step: 0,
          isUserTurn: newRoleReversed, // 새 역할에 따라 첫 차례 설정
          isActive: true,
@@ -198,11 +273,7 @@ export function usePracticeDialog(props: PracticeDialogHook) {
        };
 
        setIsRoleReversed(newRoleReversed);
-       if (!dialogState.isActive) {
-          setDialogState({ ...initialStateBase, isActive: false });
-          return;
-       }
-       setDialogState({ ...initialStateBase, isActive: true });
+       setDialogState(initialState);
 
        // 안내 메시지 추가
        addMessage(topicKey, 'ai', `이제 당신이 ${newRoleReversed ? 'AI' : 'User'} 역할을 하게 됩니다`, {
@@ -213,21 +284,17 @@ export function usePracticeDialog(props: PracticeDialogHook) {
 
        roleToggleCount.current += 1; // ✅ 첫 변경 시 카운터 증가
 
-       // ▶ 세션이 실제 활성(isActive=true) 상태일 때만 자동 흐름 허용
-       if (dialogState.isActive) {
-         if (newRoleReversed) {
-           // AI 역할: 사용자 입력 기다림
-           setTimeout(async () => {
-             await startAutoRecording(userResponseDelay * 1000);
-           }, 1000);
-         } else {
-           // User 역할: AI가 먼저 말함
-           setTimeout(() => {
-             processDialogWithState();
-           }, 500);
-         }
+       // 새 역할에 따른 처리
+       if (newRoleReversed) {
+         // AI 역할: 사용자 입력 기다림
+         setTimeout(async () => {
+           await startAutoRecording(userResponseDelay * 1000);
+         }, 1000);
        } else {
-         console.log('🛑 [ROLE] Inactive session → no auto flow');
+         // User 역할: AI가 먼저 말함
+         setTimeout(() => {
+           processDialogWithState();
+         }, 500);
        }
      } catch (err) {
        console.error('🔴 [ROLE ERROR] Role toggle failed:', err);
@@ -255,6 +322,11 @@ export function usePracticeDialog(props: PracticeDialogHook) {
 
     if (dialogState.isPaused || !dialogState.isActive || dialogState.isSpeaking) { 
       console.log('⏸️ [SKIP] Dialog is paused or inactive');
+      return;
+    }
+
+    if (!dialogState.isActive || dialogState.isPaused) {   // 모드전화 추가
+      console.log("⏸️ [SKIP] Dialog is paused or inactive");
       return;
     }
 
@@ -384,7 +456,7 @@ export function usePracticeDialog(props: PracticeDialogHook) {
        return;
      }
      try {
-       stopRecording(); // 녹음 중지
+       voiceStopRecording(); // 녹음 중지
        if (Speech && typeof Speech.stop === 'function') {
          await Speech.stop(); // TTS 중지
        }
@@ -645,5 +717,7 @@ export function usePracticeDialog(props: PracticeDialogHook) {
     handleResumePractice,
     pauseForUserAck,
     resumeAfterUserAck,
+    handleModeChangeWhileActive,
+    handleRoleReverse,
   };
 }

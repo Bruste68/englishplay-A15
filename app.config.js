@@ -50,7 +50,7 @@ export default ({ config }) => {
     name: 'SamSpeakEn',
     slug: 'englishplay-ondevice',
     scheme: 'englishplayondevice',
-    version: "10.0.5",   // versionName
+    version: "10.0.7",   // versionName
     orientation: 'portrait',
     icon: './assets/icon.png',
 
@@ -69,7 +69,7 @@ export default ({ config }) => {
     assetBundlePatterns: ['**/*'],
 
     android: {
-      versionCode: 105,
+      versionCode: 107,
       package: 'com.bruste68.englishplayondevice.play',
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',

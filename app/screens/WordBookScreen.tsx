@@ -54,6 +54,32 @@ const ruleLabels: Record<string, Record<string, string>> = {
   },
 };
 
+// ✅ 다국어 토글 및 복수형 라벨
+const uiLabels = {
+  plural: {
+    en: "Plural",
+    ko: "복수형",
+    ja: "複数形",
+    zh: "复数形式",
+    vi: "số nhiều",
+  },
+  expand: {
+    en: "▼ Expand",
+    ko: "▼ 펼치기",
+    ja: "▼ 展開",
+    zh: "▼ 展开",
+    vi: "▼ Mở rộng",
+  },
+  collapse: {
+    en: "▲ Collapse",
+    ko: "▲ 접기",
+    ja: "▲ 折りたたむ",
+    zh: "▲ 收起",
+    vi: "▲ Thu gọn",
+  },
+};
+
+
 // ✅ 단어 카드 컴포넌트
 const WordCard: React.FC<{ item: any }> = ({ item }) => {
   const [expanded, setExpanded] = useState(false);
@@ -65,7 +91,6 @@ const WordCard: React.FC<{ item: any }> = ({ item }) => {
     if (!val) return "";
     if (typeof val === "string") return val.trim();
 
-    // 배열: ["의미1","의미2"] 또는 [{ko:"…"}, "…"] 등
     if (Array.isArray(val)) {
       return val
         .map((m) =>
@@ -77,7 +102,6 @@ const WordCard: React.FC<{ item: any }> = ({ item }) => {
         .join(listSep(lang));
     }
 
-    // 객체: { ko:[…], en:[…] } 또는 { ko:"…" }
     if (typeof val === "object") {
       const picked =
         val?.[lang] ?? val?.ko ?? val?.en ?? Object.values(val ?? {})[0];
@@ -100,24 +124,52 @@ const WordCard: React.FC<{ item: any }> = ({ item }) => {
 
             return (
               <View key={pos} style={styles.block}>
-                 <Text style={styles.label}>
-                   {partOfSpeechLabels[pos]?.[language] || pos}:
-                 </Text>
-                 {meaningText ? <Text>- {meaningText}</Text> : null}
+                <Text style={styles.label}>
+                  {partOfSpeechLabels[pos]?.[language] || pos}:
+                </Text>
+                {meaningText ? <Text>- {meaningText}</Text> : null}
 
-                 {data.example && (
-                   <Text style={styles.example}>
-                      {data.example.en}
-                      {"\n"}👉 {data.example[language] || ""}
-                   </Text>
-                 )}
+                {/* ✅ 명사: 복수형 표시 */}
+                {pos === "noun" && data.plural && (
+                  <Text style={styles.subform}>
+                    • {uiLabels.plural[language] || uiLabels.plural.en}: {data.plural}
+                  </Text>
+                )}
+
+                {/* ✅ 동사: 시제 변화 표시 */}
+                {pos === "verb" && data.forms && (
+                  <Text style={styles.subform}>
+                    • {item.word} - {data.forms.past} - {data.forms.past_participle} - {data.forms.progressive}
+                  </Text>
+                )}
+
+                {/* ✅ 형용사: 비교급/최상급/부사형 표시 */}
+                {pos === "adjective" && data.forms && (
+                  <Text style={styles.subform}>
+                    • {item.word} - {data.forms.comparative} - {data.forms.superlative}
+                    {data.forms.adverb ? `, adverb: ${data.forms.adverb}` : ""}
+                  </Text>
+                )}
+
+                {/* ✅ 예문 */}
+                {data.example && (
+                  <Text style={styles.example}>
+                    {data.example.en}
+                    {"\n"}👉 {data.example[language] || ""}
+                  </Text>
+                )}
               </View>
             );
           })}
-
         </View>
       )}
-      <Text style={styles.hint}>{expanded ? "▲ 접기" : "▼ 펼치기"}</Text>
+
+      {/* ✅ 다국어 토글 버튼 */}
+      <Text style={styles.hint}>
+        {expanded
+          ? uiLabels.collapse[language] || uiLabels.collapse.en
+          : uiLabels.expand[language] || uiLabels.expand.en}
+      </Text>
     </TouchableOpacity>
   );
 };
@@ -197,42 +249,102 @@ export default function WordBookScreen() {
   );
 }
 
-// ✅ 스타일 정의
+// ✅ 스타일 정의 (가독성 강화 버전)
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f4f6f9", padding: 12 },
-  header: { fontSize: 22, fontWeight: "bold", marginBottom: 10, padding: 20 },
-  card: {
-    backgroundColor: "white",
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 2,
+  container: {
+    flex: 1,
+    backgroundColor: "#f9fbff",
+    padding: 12,
   },
-  word: { fontSize: 18, fontWeight: "bold" },
-  ipa: { fontSize: 14, color: "#888" },
-  details: { marginTop: 6, marginBottom: 6 },
-  block: { marginBottom: 10 },
-  label: { fontWeight: "bold", marginTop: 6 },
-  example: { fontStyle: "italic", marginTop: 4, color: "#333" },
-  hint: { textAlign: "right", fontSize: 12, color: "#007AFF" },
+  header: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#111", // ✅ 진한색으로 변경
+    textAlign: "center",
+    marginBottom: 10,
+    paddingVertical: 10,
+  },
   sceneTitle: {
     fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 12,
-    color: "#007AFF",
+    fontWeight: "700",
+    color: "#0070F3",
     textAlign: "center",
+    marginBottom: 14,
   },
   ruleBox: {
-    backgroundColor: "#eef6ff",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 15,
+    backgroundColor: "#e8f0ff",
+    padding: 14,
+    borderRadius: 10,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#cce0ff",
+    borderColor: "#bcd4ff",
   },
-  ruleTitle: { fontWeight: "bold", marginBottom: 6, color: "#0057D9" },
-  ruleText: { fontSize: 14, marginBottom: 4, color: "#333" },
+  ruleTitle: {
+    fontWeight: "bold",
+    color: "#0040A0",
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  ruleText: {
+    fontSize: 15,
+    color: "#1a1a1a",
+    lineHeight: 22,
+    marginBottom: 4,
+  },
+  card: {
+    backgroundColor: "#fff",
+    padding: 16,
+    borderRadius: 14,
+    marginBottom: 12,
+    borderWidth: 0.8,
+    borderColor: "#e0e0e0",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  word: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#000", // ✅ 확실히 진하게
+    marginBottom: 4,
+    lineHeight: 26,
+  },
+  ipa: {
+    fontSize: 15,
+    color: "#444", // ✅ IPA 가독성 향상
+    marginLeft: 4,
+  },
+  details: {
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  block: {
+    marginBottom: 12,
+  },
+  label: {
+    fontWeight: "700",
+    marginTop: 8,
+    fontSize: 15,
+    color: "#111",
+  },
+  example: {
+    fontStyle: "italic",
+    marginTop: 6,
+    color: "#222", // ✅ Android 대비 강화
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  subform: {
+    color: "#333",
+    fontSize: 14,
+    marginTop: 2,
+    lineHeight: 20,
+  },
+  hint: {
+    textAlign: "right",
+    fontSize: 13,
+    color: "#007AFF",
+    fontWeight: "600",
+  },
 });

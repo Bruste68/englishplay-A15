@@ -161,28 +161,33 @@ function RankBar({
   label: string;
   color?: string;
 }) {
-  // 데이터 없음 처리
-  if (!totalUsers || totalUsers === 0) {
-    return (
-      <View style={{ marginBottom: 16 }}>
-        <Text style={{ marginBottom: 4, fontWeight: "600", color: "#111" }}>
-          {label}: No data
-        </Text>
+  const hasData = !!(totalUsers && totalUsers > 1 && rank > 0);
 
+  if (!hasData) {
+    return (
+      <View style={styles.noDataBox}>
+        <Text style={styles.noDataText}>📉 No data</Text>
+        <Text style={styles.noDataSub}>No learning data available.</Text>
       </View>
     );
   }
 
-  const percent = totalUsers > 1
-    ? 100 * (1 - (rank - 1) / (totalUsers - 1))
-    : 100;
+  const percent =
+    totalUsers > 1 ? 100 * (1 - (rank - 1) / (totalUsers - 1)) : 100;
 
   return (
     <View style={{ marginBottom: 16 }}>
       <Text style={{ marginBottom: 4, fontWeight: "600", color: "#111" }}>
-        {label}: {rank ?  `Rank ${rank}` : "-"}
+        {label}: Rank {rank}
       </Text>
-      <View style={{ height: 20, width: 300, backgroundColor: "#eee", borderRadius: 10 }}>
+      <View
+        style={{
+          height: 20,
+          width: "100%",
+          backgroundColor: "#eee",
+          borderRadius: 10,
+        }}
+      >
         <View
           style={{
             height: 20,
@@ -249,14 +254,11 @@ function StudyChart({
   data: any[];
   xKey: "day" | "week" | "month";
 }) {
+  const { t, language } = useLanguage();
+
   const colors = [
-    "#1976D2", // Business
-    "#FF9800", // Meeting
-    "#4CAF50", // Presentation
-    "#9C27B0", // Daily
-    "#009688", // Shopping
-    "#795548", // Restaurant
-    "#607D8B", // Travel (✅ 추가)
+    "#1976D2", "#FF9800", "#4CAF50", "#9C27B0",
+    "#009688", "#795548", "#607D8B",
   ];
   const categories = [
     { key: "business", name: "Business" },
@@ -275,50 +277,84 @@ function StudyChart({
       ? fillMissingWeeks(data)
       : fillMissingMonths(data);
 
+  // ✅ 전체 합계로 데이터 존재 여부 판단
+  const totalSum = sliced.reduce((sum, d) => sum + (d.total || 0), 0);
+  const hasData = totalSum > 0;
+
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      {sliced.length === 0 ? (
-        <Text style={styles.noData}>{t.dashboard.noData}</Text>
+
+      {!hasData ? (
+        <View style={styles.noDataBox}>
+          <Text style={styles.noDataText}>📊 No data</Text>
+          <Text style={styles.noDataSub}>
+            {language === "ko"
+              ? "No learning data available."
+              : "No learning data available."}
+          </Text>
+        </View>
       ) : (
         <>
           <VictoryChart
             theme={VictoryTheme.material}
             domainPadding={{ x: 25, y: 20 }}
-            padding={{ top: 20, bottom: 50, left: 50, right: 20 }} 
+            padding={{ top: 20, bottom: 50, left: 50, right: 20 }}
           >
             <VictoryAxis
               tickValues={sliced.map((d) => d[xKey])}
               tickFormat={(t) => String(t)}
-              style={{ tickLabels: { fill: '#333', fontSize: 10 } }}
+              style={{ tickLabels: { fill: "#333", fontSize: 10 } }}
             />
             <VictoryAxis dependentAxis tickFormat={(t) => `${t}`} />
 
-            {/* 누적 막대그래프 */}
             <VictoryStack colorScale={colors}>
               {categories.map((c) => (
                 <VictoryBar key={c.key} data={sliced} x={xKey} y={c.key} />
               ))}
             </VictoryStack>
 
-            {/* ✅ 버전 2: 숫자만 */}
             <VictoryScatter
               data={sliced}
               x={xKey}
               y="total"
               size={3}
-              labels={({ datum }) => `${datum.total}`}
+              labels={({ datum }) => (datum.total > 0 ? `${datum.total}` : "")}
               labelComponent={
-                <VictoryLabel dy={-8} style={{ fill: '#111', fontSize: 12, fontWeight: "600" }} />
+                <VictoryLabel
+                  dy={-8}
+                  style={{ fill: "#111", fontSize: 12, fontWeight: "600" }}
+                />
               }
             />
           </VictoryChart>
 
-          {/* ✅ 범례를 차트 밖에서 렌더링 */}
-          <View style={{ marginTop: 8, flexDirection: "row", flexWrap: "wrap", justifyContent: "center" }}>
+          <View
+            style={{
+              marginTop: 8,
+              flexDirection: "row",
+              flexWrap: "wrap",
+              justifyContent: "center",
+            }}
+          >
             {categories.map((c, i) => (
-              <View key={c.key} style={{ flexDirection: "row", alignItems: "center", marginRight: 12, marginBottom: 4 }}>
-                <View style={{ width: 12, height: 12, backgroundColor: colors[i], marginRight: 4 }} />
+              <View
+                key={c.key}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginRight: 12,
+                  marginBottom: 4,
+                }}
+              >
+                <View
+                  style={{
+                    width: 12,
+                    height: 12,
+                    backgroundColor: colors[i],
+                    marginRight: 4,
+                  }}
+                />
                 <Text style={{ fontSize: 12, color: "#111" }}>{c.name}</Text>
               </View>
             ))}
@@ -706,5 +742,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
+  },
+  noDataBox: {
+    backgroundColor: "#F2F2F2",
+    padding: 16,
+    borderRadius: 10,
+    alignItems: "center",
+    marginVertical: 8,
+  },
+  noDataText: {
+    color: "#444",
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  noDataSub: {
+    color: "#777",
+    fontSize: 13,
+    textAlign: "center",
   },
 });
