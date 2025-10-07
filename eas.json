@@ -24,9 +24,7 @@
       "developmentClient": false,
       "distribution": "store",                // ✅ Google Play 업로드용
       "android": {
-        "flavor": "play",                    // ✅ Google Play flavor 지정
         "buildType": "app-bundle",           // ✅ .aab (Play 콘솔 전용)
-        "gradleCommand": ":app:bundleRelease",
         "ndk": "25.1.8937393"
       },
       "node": "22.16.0",
