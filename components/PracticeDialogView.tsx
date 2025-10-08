@@ -724,7 +724,9 @@ export const PracticeDialogView = forwardRef<
               <TouchableOpacity
                 onPress={
                   dialogState.isPaused
-                    ? practice?.handleResumePractice
+                    ? () => {
+                       practice?.handleResumePractice?.();
+                      }
                     : dialogState.isActive
                     ? practice?.handlePausePractice
                     : handleStartMemorization
@@ -733,7 +735,9 @@ export const PracticeDialogView = forwardRef<
               >
                 <Image
                   source={
-                    dialogState.isPaused
+                    (!dialogState.isActive && !dialogState.isPaused)
+                      ? require('../assets/images/start.png')
+                      : dialogState.isPaused
                       ? require('../assets/images/resume.png')
                       : dialogState.isActive
                       ? require('../assets/images/pause.png')
