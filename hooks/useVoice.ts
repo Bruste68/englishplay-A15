@@ -41,7 +41,7 @@ async function transcribeAudio(uri: string, lang = 'en'): Promise<string> {
 let globalRecordingInstance: Audio.Recording | null = null;
 export const isAutoRecordingInProgress = { current: false };
 
-export function useVoice() {
+export function useVoice(opts?: { shouldBlockUI?: () => boolean }) {
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +168,12 @@ export function useVoice() {
         console.log('🔈 [STOP] URI:', uri);
         try {
           const text = await transcribeAudio(uri, 'en');
+
+           if (opts?.shouldBlockUI?.()) {
+              console.log('🚫 [WHISPER] Ignored during pause/resume guard');
+              return;
+          }
+
           if (!dialogActiveRef.current) {
             console.log('⛔ 대화 종료 후 Whisper 응답 무시');
             return;

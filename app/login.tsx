@@ -207,11 +207,11 @@ export default function LoginScreen() {
       vi: 'Tài khoản này đã được kết nối với hơn 10 thiết bị. Vui lòng mua Premium để tiếp tục.',
     },
     videoManual: {
-      ko: "🎬 비디오 매뉴얼",
-      en: "🎬 Video Manual",
-      zh: "🎬 视频手册",
-      ja: "🎬 ビデオマニュアル",
-      vi: "🎬 Hướng dẫn Video",
+      ko: "🎬 PDF 매뉴얼",
+      en: "🎬 PDF Manual",
+      zh: "🎬 PDF手册",
+      ja: "🎬 PDFマニュアル",
+      vi: "🎬 Hướng dẫn PDF",
     },
     close: {
       ko: "닫기",
