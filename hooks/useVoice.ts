@@ -179,6 +179,11 @@ export function useVoice(opts?: { shouldBlockUI?: () => boolean }) {
             return;
           }
           if (!text || text.trim() === "") {
+            if (opts?.shouldBlockUI?.()) {
+               console.log('🚫 [WHISPER] Ignored empty text during pause/resume guard');
+               return;
+            }
+            console.log('🤔 [WHISPER] No speech detected → repeat request');
             setTranscript("__NO_SPEECH__");
           } else {
             setTranscript(text.trim());

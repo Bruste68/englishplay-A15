@@ -242,12 +242,25 @@ export function usePracticeDialog(props: PracticeDialogHook) {
         setTimeout(() => {
           startAutoRecording(userResponseDelay * 1000);
         }, 1000);
+        if (!isMemorizationMode) {
+          console.log('🎤 [START] 사용자부터 시작 - 자동 녹음');
+          setTimeout(() => {
+            startAutoRecording(userResponseDelay * 1000);
+          }, 1000);
+        } else {
+          console.log('⏸️ [MEMO MODE] Manual start required');
+        }
       } else {
         console.log('🤖 [START] AI부터 시작 - 대사 실행');
         setTimeout(() => {
           processDialogWithState();
         }, 500);
       }
+      setTimeout(() => {
+          isProcessingRef.current = false;
+          setDialogState(prev => ({ ...prev, isActive: true }));
+          console.log('🩵 [ROLE FIX] Force-reactivate dialog after role change');
+      }, 800);
     }
   };
 
@@ -317,10 +330,14 @@ export function usePracticeDialog(props: PracticeDialogHook) {
 
        // 새 역할에 따른 처리
        if (newRoleReversed) {
-         // AI 역할: 사용자 입력 기다림
-         setTimeout(async () => {
-           await startAutoRecording(userResponseDelay * 1000);
-         }, 1000);
+         if (!practiceMode && !isMemorizationMode) {
+           console.log('🎤 [ROLE CHANGE] Triggering first recording');
+           setTimeout(() => {
+             startAutoRecording(userResponseDelay * 1000);
+           }, 1000);
+         } else {
+           console.log('⏸️ [ROLE CHANGE] Skip auto-record (practice/memo mode active)');
+         }
        } else {
          // User 역할: AI가 먼저 말함
          setTimeout(() => {
