@@ -548,6 +548,84 @@ export default function MyDashboard({ compact = false }: Props) {
     );
   }
 
+  // 🔽 useEffect들 아래에 추가하세요
+  const handleSubscribe = async () => {
+    try {
+      // react-native-iap에서 구매창 열기 or 구독 페이지 이동
+      Alert.alert(
+        "구독하기",
+        "Google Play 결제 화면으로 이동하시겠습니까?",
+        [
+          { text: "취소", style: "cancel" },
+          {
+            text: "확인",
+            onPress: async () => {
+              // 👉 실제 결제 처리 (React Native IAP 연결 시)
+              // router.push("/purchase");  // 이미 purchase.tsx 있을 경우
+              Linking.openURL("https://samspeakgo.com/purchase");
+            },
+          },
+        ]
+      );
+    } catch (e) {
+      console.error("구독하기 오류:", e);
+    }
+  };
+
+  const handleExtend = async () => {
+    try {
+      Alert.alert(
+        "구독 연장",
+        "현재 구독을 연장하시겠습니까?",
+        [
+          { text: "취소", style: "cancel" },
+          {
+            text: "확인",
+            onPress: async () => {
+              Linking.openURL("https://samspeakgo.com/purchase");
+            },
+          },
+        ]
+      );
+    } catch (e) {
+      console.error("구독 연장 오류:", e);
+    }
+  };
+
+  const handleCancel = async () => {
+    try {
+      Alert.alert(
+        "구독 취소",
+        "Play 스토어 구독 관리 페이지로 이동하시겠습니까?",
+        [
+          { text: "취소", style: "cancel" },
+          {
+            text: "확인",
+            onPress: async () => {
+              if (Platform.OS === "android") {
+                Linking.openURL(
+                  "https://play.google.com/store/account/subscriptions"
+                );
+              } else if (Platform.OS === "ios") {
+                Linking.openURL(
+                  "https://apps.apple.com/account/subscriptions"
+                );
+              }
+            },
+          },
+        ]
+      );
+    } catch (e) {
+      console.error("구독 취소 오류:", e);
+    }
+  };
+
+  const handleRefresh = async () => {
+    await load();
+    Alert.alert("새로고침 완료", "구독 상태가 갱신되었습니다.");
+  };
+
+
   // ✅ 오늘 학습 시간은 summary에서 내려온 todayMinutes 사용
   const todayMinutes = progress.todayMinutes ?? 0;
 
@@ -627,18 +705,44 @@ export default function MyDashboard({ compact = false }: Props) {
           </Text>
         )}
 
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
-          <TouchableOpacity style={[styles.btn, { backgroundColor: "#007AFF" }]}>
+        {/* 구독하기 */}
+        <View
+          style={{
+            flexDirection: "row",
+            gap: 10,
+            marginTop: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <TouchableOpacity
+            style={[styles.btn, { backgroundColor: "#007AFF" }]}
+            onPress={handleSubscribe}
+          >
             <Text style={styles.btnText}>{t.dashboard.subscribe}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.btn, { backgroundColor: isExpiringSoon ? "#FF5722" : "#4CAF50" }]}>
+
+          <TouchableOpacity
+            style={[
+              styles.btn,
+              { backgroundColor: isExpiringSoon ? "#FF5722" : "#4CAF50" },
+            ]}
+            onPress={handleExtend}
+          >
             <Text style={styles.btnText}>{t.dashboard.extendSubscription}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.btn, { backgroundColor: "#D32F2F" }]}>
+
+          <TouchableOpacity
+            style={[styles.btn, { backgroundColor: "#D32F2F" }]}
+            onPress={handleCancel}
+          >
             <Text style={styles.btnText}>{t.dashboard.cancelSubscription}</Text>
           </TouchableOpacity>
+
           {!compact && (
-            <TouchableOpacity style={[styles.btn, { backgroundColor: "#FF9800" }]}>
+            <TouchableOpacity
+              style={[styles.btn, { backgroundColor: "#FF9800" }]}
+              onPress={handleRefresh}
+            >
               <Text style={styles.btnText}>{t.dashboard.refresh}</Text>
             </TouchableOpacity>
           )}
