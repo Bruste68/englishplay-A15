@@ -63,7 +63,6 @@ const DEFAULT_STATE = {
 };
 
 export const PracticeDialogView = forwardRef((props, ref) => {
->((props, ref) => {
   const {
     topicKey,
     currentLevel,
