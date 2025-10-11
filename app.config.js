@@ -91,8 +91,8 @@ export default ({ config }) => {
         projectId: '3c63c36b-05ee-41fb-aa8e-1d8c56077f3b'
       },
       ENV,
-      API_BASE_URL: process.env.EXPO_PUBLIC_BACKEND_URL || "https://samspeakgo.com/api",
-      EXPO_PUBLIC_WHISPER_URL: process.env.EXPO_PUBLIC_WHISPER_URL,
+      API_BASE_URL: process.env.EXPO_PUBLIC_BACKEND_URL || "https://samspeakgo.com",
+      EXPO_PUBLIC_WHISPER_URL: process.env.EXPO_PUBLIC_WHISPER_URL || "https://samspeakgo.com/api",
       EXPO_PUBLIC_REGION: process.env.EXPO_PUBLIC_REGION,
       EXPO_PUBLIC_APP_NAME: process.env.EXPO_PUBLIC_APP_NAME,
       EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,

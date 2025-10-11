@@ -118,8 +118,8 @@ export const PracticeDialogView = forwardRef<
   const lastResumeHandledTimeRef = useRef<number>(0);
   const lastPauseHandledTimeRef = useRef<number>(0);
   const lastBackgroundTimeRef = useRef<number | null>(null);
-  const whisperAbortedRef = useRef(false);
   const isResumingRef = useRef(false);
+  const modeSwitchingRef = useRef(false); 
 
   const currentScene = useMemo(() => scenes?.[sceneIndex], [scenes, sceneIndex]);
 
@@ -175,7 +175,7 @@ export const PracticeDialogView = forwardRef<
       console.log('🔴 [PAUSE] 확정 → 녹음/음성 정지 + isPaused=true');
 
       // ✅ Whisper 완전 중단 플래그 설정
-      whisperAbortedRef.current = true;
+      practice?.setWhisperAborted?.(true);
       stopAllRecordingLogic?.();
       stopAll?.();
       try { Speech.stop(); } catch {}
@@ -186,7 +186,14 @@ export const PracticeDialogView = forwardRef<
       if (practice?.pauseForUserAck) {
         practice.pauseForUserAck();
       } else {
-        practice?.setDialogState?.({ ...dialogRef.current, isPaused: true });
+         if (practice?.pauseForUserAck) {
+           practice.pauseForUserAck(); // 내부에서 bumpRun() 수행
+         } else {
+          practice?.setDialogState?.({ ...dialogRef.current, isPaused: true });
+           practice?.setResumeGuard?.(true);
+           practice?.setWhisperAborted?.(true);
+           // View에서만 멈춘 경우도 runId를 올려 예약 무효화
+           if (typeof (practice as any)?.__bumpRun === 'function') (practice as any).__bumpRun();
       }
     };
 
@@ -202,6 +209,11 @@ export const PracticeDialogView = forwardRef<
       const now = Date.now();
       const bgAt = lastBackgroundTimeRef.current;
       const wasRealBackground = bgAt !== null && now - bgAt >= REAL_BG_MS;
+
+      if (modeSwitchingRef.current) {
+        console.log('🟨 [GUARD] Ignore resume during mode switch');
+        return;
+      }
 
       if (!wasRealBackground) return;
 
@@ -226,6 +238,11 @@ export const PracticeDialogView = forwardRef<
 
     const handleAppStateChange = (nextState: AppStateStatus) => {
       console.log('📱 [APPSTATE CHANGE]', nextState);
+
+      if (modeSwitchingRef.current) {
+        console.log('🟨 [GUARD] Ignore resume during mode switch');
+        return;
+      }
 
       if (nextState === 'background') {
         lastBackgroundTimeRef.current = Date.now();
@@ -441,28 +458,53 @@ export const PracticeDialogView = forwardRef<
   const handleBackToNormalMode = async () => {
     console.log('[BACK NORMAL] Returning to script mode');
 
-    stopAllRecordingLogic();
-    stopAll();
-    Speech.stop();
-    abortWhisper?.();
-    clearTranscript();
+    // 🔒 UI 전환 가드 켜기 → AppState pop-up/자동재개 차단
+    modeSwitchingRef.current = true;
+    practice?.setResumeGuard?.(true);
+    practice?.setWhisperAborted?.(true); // Whisper 업로드 완전 차단
 
-    setShowFullScript(true);
-    setIsMemorizationMode(false);
+    try {
+      // 모든 오디오/Whisper 활동 안전 정지 (업로드 금지 상태에서)
+      stopAllRecordingLogic();
+      stopAll();
+      try { await Speech.stop(); } catch {}
 
-    const preserved = {
-       ...(practice?.dialogState ?? DEFAULT_STATE),
-       isActive: true,
-       isPaused: false,
-       isSpeaking: false,
-       isUserTurn: practice?.dialogState?.isUserTurn ?? false,
-    };
+      abortWhisper?.();   // 서버 업로드 abort
+      clearTranscript();  // 로컬 텍스트 초기화
 
-    setTimeout(() => {
-      practice?.setDialogState?.(preserved);
-    }, 100);
+      setShowFullScript(true);
+      setIsMemorizationMode(false);
 
-    console.log('✅ [MODE] Script mode resumed (reset done)');
+      // 현재 턴 유지하되, AI 턴이면 이어서 대사 실행 / 사용자 턴이면 대기
+      const prev = practice?.dialogState ?? DEFAULT_STATE;
+      const preserved = {
+        ...DEFAULT_STATE,
+        step: prev.step ?? 0,
+        isActive: true,
+        isPaused: false,
+        isSpeaking: false,
+        isUserTurn: prev.isUserTurn ?? false,
+      };
+
+      // 상태 반영
+      setTimeout(() => {
+        practice?.setDialogState?.(preserved);
+
+        // 👉 AI 차례였다면 바로 다음 대사 실행 (Whisper는 금지 상태)
+        if (preserved.isActive && !preserved.isPaused && preserved.isUserTurn === false) {
+          console.log('🟦 [BACK NORMAL] AI turn → continue speaking');
+          practice?.processDialogWithState?.(preserved);
+        }
+      }, 120);
+    } finally {
+      // 잠깐의 전환 시간 이후 가드 해제
+      setTimeout(() => {
+        practice?.setResumeGuard?.(false);
+        practice?.setWhisperAborted?.(false);
+        modeSwitchingRef.current = false;
+      }, 800);
+      console.log('✅ [MODE] Script mode resumed (guards released)');
+    }
   };
 
   const renderMessage = ({ item }: { item: Message }) => {

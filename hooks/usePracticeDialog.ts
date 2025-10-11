@@ -55,7 +55,8 @@ export function usePracticeDialog(props: PracticeDialogHook) {
 
   const [sceneIndex, setSceneIndex] = useState(0);
   const { stopRecording: voiceStopRecording, abortWhisper } = useVoice({
-    shouldBlockUI: () => resumeGuardRef.current || waitForUserAckRef.current,
+    shouldBlockUI: () =>
+           resumeGuardRef.current || waitForUserAckRef.current || whisperAbortedRef.current,
   });
 
   const [dialogState, setDialogState] = useState<DialogState>({
@@ -78,6 +79,9 @@ export function usePracticeDialog(props: PracticeDialogHook) {
   const waitForUserAckRef = useRef(false);
   const autoTriggerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const runIdRef = useRef(0); // 현재 진행중 플로우의 토큰
+  const bumpRun = () => { runIdRef.current += 1; };
+
   // 최상단 state/ref들 근처에 추가
   const resumeGuardRef = useRef(false);      // 복귀 팝업 떠 있을 때 자동 진행 금지
   const whisperAbortedRef = useRef(false);   // 백그라운드 전환 중 Whisper 요청/자동녹음 차단
@@ -85,7 +89,44 @@ export function usePracticeDialog(props: PracticeDialogHook) {
   // 외부(View)에서 쓸 수 있도록 메서드 노출할 준비
   const setResumeGuard = (on: boolean) => { resumeGuardRef.current = on; };
   const setWhisperAborted = (on: boolean) => { whisperAbortedRef.current = on; };
+  const resumePlanRef = useRef<null | { step: number; userTurn: boolean }>(null);
 
+  const scheduleNextTurn = async (nextStep: number, nextIsUserTurn: boolean) => {
+    const myRun = runIdRef.current;
+
+    const guardOn = resumeGuardRef.current || waitForUserAckRef.current || whisperAbortedRef.current;
+    if (guardOn) {
+      // 팝업이 떠 있거나 Whisper 차단 중이면 '계획만 저장'하고 멈춘다
+      resumePlanRef.current = { step: nextStep, userTurn: nextIsUserTurn };
+      setDialogState(prev => ({ ...prev, isPaused: true, isActive: true }));
+      return;
+    }
+
+    // 예약 실행 직전에도 토큰이 변했는지 확인 (중간에 BG 등으로 취소되었으면 즉시 무시)
+    if (myRun !== runIdRef.current) return;
+
+    setDialogState({
+      step: nextStep,
+      isUserTurn: nextIsUserTurn,
+      isActive: true,
+      isSpeaking: false,
+      loadingSummary: false,
+      isPaused: false,
+    });
+
+    if (nextIsUserTurn) {
+      await playBell('beep');
+      // 실행 직전 다시 토큰 확인
+      if (myRun !== runIdRef.current) return;
+      if (!waitForUserAckRef.current && !resumeGuardRef.current && !whisperAbortedRef.current) {
+        await startAutoRecording(userResponseDelay * 1000);
+      }
+    } else {
+      // AI 연쇄 구간
+      if (myRun !== runIdRef.current) return;
+      processDialogWithState();
+    }
+  };
 
   const scenes = useMemo(() => {
     console.log(`📚 [DIALOG] Loading scenes for ${topicKey} - ${currentLevel}`);
@@ -164,6 +205,7 @@ export function usePracticeDialog(props: PracticeDialogHook) {
 
   /** Alert 직후 대화 일시정지 */
   const pauseForUserAck = async () => {
+     bumpRun();
     waitForUserAckRef.current = true;
 
     // ✅ 복귀 중 자동재개 방지 + Whisper 차단
@@ -195,16 +237,21 @@ export function usePracticeDialog(props: PracticeDialogHook) {
     // ✅ Whisper 중단 플래그 해제
     resumeGuardRef.current = false;
     whisperAbortedRef.current = false;
+    const plan = resumePlanRef.current;
+    resumePlanRef.current = null;
 
     const wasUserTurn = dialogStateRef.current.isUserTurn;
     waitForUserAckRef.current = false;
     setDialogState(prev => ({ ...prev, isPaused: false, isActive: true }));
 
     console.log('▶️ [WAIT-ACK] Resuming after user confirmation');
+    if (plan) {
+      await scheduleNextTurn(plan.step, plan.userTurn);
+      return;
+    }
+    // 과거 방식의 fallback (혹시 모를 엣지케이스)
     if (wasUserTurn) {
-      try {
-        await playBell('beep');
-      } catch {}
+      try { await playBell('beep'); } catch {}
       await startAutoRecording(userResponseDelay * 1000);
     } else {
       processDialogWithState();
@@ -460,37 +507,7 @@ export function usePracticeDialog(props: PracticeDialogHook) {
            (nextLine.role === 'user');
     
         console.log(`🧭 [NEXT] isUserTurn: ${nextIsUserTurn} → ${nextLine?.text}`);
-        setDialogState({
-           step: newStep,
-           isUserTurn: nextIsUserTurn,
-           isActive: true,
-           isSpeaking: false,
-           loadingSummary: false,
-           isPaused: dialogState.isPaused,
-          // isPaused: false,
-        });
-
-        if (nextIsUserTurn) {
-          console.log('🔔 [NEXT] User turn');
-          if (!waitForUserAckRef.current) {     // ⬅️ 추가
-            await playBell('beep');
-            await startAutoRecording(userResponseDelay * 1000);
-          } else {
-            console.log('⏸️ [WAIT-ACK] Not starting auto recording until OK');
-          }
-        } else {
-           console.log('🔄 [RECURSE] Triggering next AI line');
-           processDialogWithState();
-
-           // 🔥 릴리즈 꼬임 방지: 안전 재시도
-           setTimeout(() => {
-             const s = dialogStateRef.current;
-             if (s.isActive && !s.isSpeaking && !s.isPaused && !waitForUserAckRef.current) {
-               console.log('🔁 [SAFE RETRY] retry with fresh state');
-               processDialogWithState();
-             }
-           }, 150);
-        }
+        await scheduleNextTurn(newStep, nextIsUserTurn);
       }
     } catch (err) {
        console.error('🔴 [DIALOG ERROR] Process error:', err);
@@ -777,5 +794,6 @@ export function usePracticeDialog(props: PracticeDialogHook) {
     resumeAfterUserAck,
     setResumeGuard,
     setWhisperAborted,
+     __bumpRun: bumpRun,
   };
 }
