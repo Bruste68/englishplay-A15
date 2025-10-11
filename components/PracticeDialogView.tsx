@@ -62,9 +62,7 @@ const DEFAULT_STATE = {
   loadingSummary: false,
 };
 
-export const PracticeDialogView = forwardRef<
-  PracticeDialogViewHandle,
-  PracticeDialogViewProps
+export const PracticeDialogView = forwardRef((props, ref) => {
 >((props, ref) => {
   const {
     topicKey,
@@ -1000,3 +998,7 @@ const styles = StyleSheet.create({
   translationText: { fontSize: 14, color: '#666', marginTop: 4 },
   buttonWrapper: { flex: 1, marginHorizontal: 4 },
 });
+
+}) as React.ForwardRefExoticComponent<
+  PracticeDialogViewProps & React.RefAttributes<PracticeDialogViewHandle>
+>;
