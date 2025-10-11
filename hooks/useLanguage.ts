@@ -94,7 +94,14 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
       myInfo: "My Info",
       viewAll: "View All",
       close: "Close",
-    }
+    },
+    resumeDialog: {
+      title: "Continue Practice?",
+      desc: "You were practicing before the app was paused. Would you like to continue?",
+      continue: "Continue",
+      restart: "Restart",
+      exit: "Exit",
+    },
   },
   ko: {
     email: '이메일',
@@ -185,7 +192,14 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
       myInfo: "내 정보",
       viewAll: "전체보기",
       close: "닫기",
-    }
+    },
+    resumeDialog: {
+      title: "연습을 계속하시겠습니까?",
+      desc: "앱이 일시 중지되기 전에 연습 중이었습니다. 계속하시겠습니까?",
+      continue: "계속하기",
+      restart: "처음부터",
+      exit: "종료",
+    },
   },
   ja: {
     email: 'メールアドレス',
@@ -276,7 +290,14 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
       myInfo: "マイ情報",
       viewAll: "すべて表示",
       close: "閉じる",
-    }
+    },
+    resumeDialog: {
+      title: "練習を続けますか？",
+      desc: "アプリが一時停止される前に練習していました。続行しますか？",
+      continue: "続ける",
+      restart: "最初から",
+      exit: "終了",
+    },
   },
   zh: {
     email: '电子邮箱',
@@ -367,7 +388,14 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
       myInfo: "我的信息",
       viewAll: "查看全部",
       close: "关闭",
-    }
+    },
+    resumeDialog: {
+      title: "继续练习？",
+      desc: "应用暂停前您正在练习。是否继续？",
+      continue: "继续",
+      restart: "重新开始",
+      exit: "退出",
+    },
   },
   vi: {
     email: 'Email',
@@ -458,7 +486,14 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
       myInfo: "Thông tin",
       viewAll: "Xem tất cả",
       close: "Đóng",
-    }
+    },
+    resumeDialog: {
+      title: "Tiếp tục luyện tập?",
+      desc: "Bạn đang luyện tập trước khi ứng dụng bị tạm dừng. Bạn có muốn tiếp tục không?",
+      continue: "Tiếp tục",
+      restart: "Bắt đầu lại",
+      exit: "Thoát",
+    },
   },
 };
 
