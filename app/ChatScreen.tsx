@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { useLanguage } from '../hooks/useLanguage';
 import { router } from 'expo-router';
+import { ActivityIndicator } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { generateFreeTalkFeedback, saveFeedbackToStorage } from '../utils/feedback';
 import { useFeedbackStore } from '../store/feedbackStore';
@@ -128,15 +129,61 @@ function ChatScreen() {
   // ✅ 하드웨어 백버튼 처리
   useFocusEffect(
     useCallback(() => {
-      const onBackPress = async () => {
+      const onBackPress = async () => { 
 
-        // 먼저 저장
-        if (!hasEndedRef.current) {
-          hasEndedRef.current = true;
-          await handlePracticeEnd();
+        console.log('🛑 [BACK] User pressed hardware back button');
+
+        try {
+          // 🔸 1. 모든 오디오 및 Whisper 즉시 중단
+          if (practice?.dialogState?.isSpeaking) {
+            console.log('🔈 [BACK] AI is speaking → stopping TTS safely');
+            practice.abortDuringBackRef && (practice.abortDuringBackRef.current = true);
+            Speech.stop();
+            await new Promise((res) => setTimeout(res, 200)); // ✅ 0.2초 딜레이
+          }
+
+          // 🔹 2️⃣ 녹음 중이면 완전 정지 대기
+          if (isRecording) {
+             console.log('🎙️ [BACK] Recording active → stopping');
+            await stopRecording();
+            console.log('✅ [BACK] Recording fully stopped');
+          }
+
+          // 🔹 3️⃣ Whisper 업로드 지연 방지: Abort + Clean
+          if (typeof abortWhisper === 'function') {
+             console.log('🧠 [BACK] Forcing Whisper abort');
+            abortWhisper();
+          }
+
+          // 🔹 4️⃣ 오디오 세션 전체 초기화 (Ghost 방지)
+          try {
+            const { Audio } = await import('expo-av');
+            await Audio.setAudioModeAsync({
+              allowsRecordingIOS: false,
+              playsInSilentModeIOS: false,
+              shouldDuckAndroid: true,
+              staysActiveInBackground: false,
+            });
+            console.log('✅ [BACK] Audio session hard reset');
+          } catch (err) {
+            console.warn('⚠️ [BACK] Audio reset failed:', err);
+          }
+
+          // 🔹 5️⃣ Practice 정리 및 종료
+          if (!hasEndedRef.current) {
+            hasEndedRef.current = true;
+            await handlePracticeEnd();
+          }
+
+          // 🔹 6️⃣ Router 이동 전 300ms 대기 (유령 Whisper 차단)
+          await new Promise((res) => setTimeout(res, 300));
+            // 🔸 3. 안전한 라우팅 처리
+          handleBackToTopic();
+
+        } catch (err) {
+          console.error('❌ [BACK] Error during cleanup:', err);
         }
 
-        handleBackToTopic();
         return true; // 기본 동작 차단
       };
 
@@ -152,13 +199,15 @@ function ChatScreen() {
 
     if (cleanText === "__NETWORK_ERROR__") {
       console.log("🌐 [Whisper] Network error detected");
-      addMessage({
-        role: "system",
-        text: "Network error. Please try again.",
-        step: practice.dialogState?.step ?? 0,
-        scene: practice.scenes?.[practice.sceneIndex]?.code ?? "unknown",
-        timestamp: Date.now(),
-      });
+      addMessage(
+        topicKeyResolved,
+        "ai",
+        "Network error. Please try again.",
+        {
+           isTemplate: false,
+           audioFile: undefined,
+        }
+      );
 
       practice.pauseForUserAck?.();
 
@@ -182,13 +231,12 @@ function ChatScreen() {
 
     if (cleanText === "__NO_SPEECH__") {
       console.log("🤔 [Whisper] No speech detected → repeat request");
-      addMessage({
-        role: "system",
-        text: "I didn’t catch that. Could you repeat?",
-        step: practice.dialogState?.step ?? 0,
-        scene: practice.scenes?.[practice.sceneIndex]?.code ?? "unknown",
-        timestamp: Date.now(),
-      });
+      addMessage(
+        topicKeyResolved,
+        "ai",
+        "I didn’t catch that. Could you repeat?",
+        { isTemplate: false }
+      );
 
       practice.pauseForUserAck?.();
 
@@ -236,7 +284,7 @@ function ChatScreen() {
       last &&
       last.role === 'user' &&
       last.step === currStep &&
-      last.scene === sceneCode &&
+      String(last.scene) === sceneCode &&
       last.text?.trim() === cleanText
     ) {
       console.log("↩️ [Whisper] duplicate transcript ignored");
@@ -244,13 +292,16 @@ function ChatScreen() {
     }
 
     // ✅ 정상 응답만 메시지 추가
-    addMessage({
-      role: 'user',
-      text: cleanText,
-      step: currStep,
-      scene: sceneCode,
-      timestamp: Date.now(),
-    });
+    addMessage(
+      topicKeyResolved,
+      'user',
+      cleanText,
+      {
+        audioFile: undefined,
+        isTemplate: false,
+        extra: { step: currStep, scene: sceneCode, timestamp: Date.now() },
+      }
+    );
   }, [transcript]);
 
   const handlePracticeEnd = async () => {
@@ -345,7 +396,7 @@ function ChatScreen() {
         console.log("✅ Progress flush 호출됨");
       }
     } catch (error) {
-      console.error('🔴 [PRACTICE END ERROR]', error?.name, error?.message, error);
+      console.error('🔴 [PRACTICE END ERROR]', (error as any)?.name, (error as any)?.message, error);
     } finally {
       isSavingRef.current = false;
       setHasStartedPractice(false);
@@ -396,7 +447,7 @@ function ChatScreen() {
     if (isMemorizationMode) return; // 추가
 
     console.log('🔄 [RESET] topic 또는 level 변경 감지됨 → 상태 초기화');
-    practice.resetAllStates?.();
+    practiceRef.current?.resetAllStates?.();
   }, [topicKey, currentLevel]);
 
 
@@ -471,7 +522,7 @@ function ChatScreen() {
       {isFreeTalk ? (
         <FreeChatView
           topicKey={topicKeyResolved}
-          messages={messages}
+          messages={messages as any}
           addMessage={addMessage}
           startRecording={startRecording}
           stopRecording={stopRecording}
@@ -504,6 +555,11 @@ function ChatScreen() {
                    isPaused: false,
                    loadingSummary: false,
                  });
+                 // ✅ 0.3초 후 오디오 자동 재시작
+                 setTimeout(() => {
+                   console.log('🎤 [MEMO SAFE START] Restarting auto recording after mode switch');
+                   practice.startAutoRecording?.();
+                 }, 300);
                }
           }}
           isMemorizationMode={isMemorizationMode}

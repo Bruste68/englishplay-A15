@@ -11,7 +11,6 @@ import {
   TouchableOpacity
 } from 'react-native';
 import * as RNIap from 'react-native-iap';
-import { PurchaseState } from "react-native-iap";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { API_BASE_URL } from '../lib/api';
@@ -361,7 +360,11 @@ export default function PurchaseScreen() {
         if (!fromRestore) {   // ⬅️ 복구 흐름에서는 실패 Alert 띄우지 않음
           Alert.alert(
             safeText(t.error, "Error"),
-            safeText(json?.message, t.verifyFail || "Verification failed"),
+            safeText(
+               typeof t.verifyFail === "string"
+                 ? t.verifyFail
+                 : (t.verifyFail?.[language] ?? "Verification failed")
+            ),
             [
               {
                 text: safeText(t.confirm, "확인"),
@@ -375,7 +378,11 @@ export default function PurchaseScreen() {
       console.warn("❌ verifyAndFinish error:", e);
       Alert.alert(
         safeText(t.error, "Error"),
-        safeText(t.purchaseFail, "Purchase failed"),
+        safeText(
+           typeof t.verifyFail === "string"
+             ? t.verifyFail
+             : (t.verifyFail?.[language] ?? "Verification failed")
+        ),
         [
           {
             text: safeText(t.confirm, "확인"),
@@ -486,7 +493,9 @@ export default function PurchaseScreen() {
             safeText(t.error, "Error"),
             safeText(
               e?.debugMessage || e?.message,
-              t.purchaseFail || "Purchase failed"
+              typeof t.purchaseFail === "string"
+                 ? t.purchaseFail
+                 : (t.purchaseFail?.[language] ?? "Purchase failed")
             ),
             [
               {
@@ -642,7 +651,9 @@ export default function PurchaseScreen() {
   /** ✅ UI 렌더링 */
   const renderProduct = (p: RNIap.Subscription) => {
     const desc =
-      (t?.desc && t?.desc?.[p.productId]) || p.title || p.productId;
+      (typeof t.desc === "object" && t.desc[p.productId])
+         ? t.desc[p.productId]
+         : p.title || p.productId;
     const price = (p as any)?.localizedPrice || "";
 
     return (

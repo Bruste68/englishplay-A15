@@ -1,4 +1,4 @@
-import { LanguageCode } from '../types';
+import { LangKey as LanguageCode } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchGptResponse } from '../services/fetchGptResponse';
 import { useLanguage } from '../hooks/useLanguage';
@@ -319,7 +319,13 @@ export async function generateFreeTalkFeedback(
   }
 }
 
-function refineTip(user: string, correction: string | undefined, tip: string | undefined, type: 'pronunciation' | 'grammar' | undefined, language: LanguageCode = 'en'): string {
+function refineTip(
+  user: string,
+  correction: string | undefined,
+  tip: string | undefined,
+  type: 'pronunciation' | 'grammar' | undefined,
+  language: LanguageCode = 'en'
+): string {
   const userLower = user.toLowerCase();
   const correctionLower = correction?.toLowerCase() ?? '';
 

@@ -4,7 +4,10 @@ import * as Localization from 'expo-localization';
 
 export type LanguageCode = 'en' | 'ko' | 'ja' | 'zh' | 'vi';
 
-export const translations: Record<LanguageCode, Record<string, string>> = {
+export const translations: Record<
+  LanguageCode,
+  Record<string, string | Record<string, string>>
+> = {
   en: {
     email: 'Email',
     password: 'Password',

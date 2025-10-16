@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
-  Image, ActivityIndicator, BackHandler, Keyboard,  Modal, Dimensions, Linking
+  Image, ActivityIndicator, BackHandler, Keyboard, Dimensions, Linking
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,7 +10,7 @@ import { API_BASE_URL } from '../lib/api';
 import { useLanguage } from '../hooks/useLanguage';
 import * as SecureStore from 'expo-secure-store';
 import uuid from 'react-native-uuid';
-import { Video } from "expo-av";
+
 
 // 서버 응답 타입 예시
 interface LoginSuccessDto {
@@ -57,8 +57,10 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [manualVisible, setManualVisible] = useState(false);
-  const [manualType, setManualType] = useState<"pdf" | "video" | null>(null);
+
+  const dash = typeof t.dashboard === 'object' && t.dashboard
+    ? (t.dashboard as any)
+    : null;
 
   // ✅ 마운트 시 로그인 상태 복원
   useEffect(() => {
@@ -134,7 +136,6 @@ export default function LoginScreen() {
       };
 
       syncPremium();
-
       return () => subscription.remove();
     }, [])
   );
@@ -222,10 +223,12 @@ export default function LoginScreen() {
     }
   };
 
-  const getLocalized = (obj: Record<string, string>): string => {
+  const getLocalized = (obj?: Record<string, string> | null | string): string => {
+    if (!obj) return "";
+    if (typeof obj === "string") return obj;
     if (obj[language]) return obj[language];
-    if (language.startsWith('zh') && obj['zh']) return obj['zh'];
-    return obj['en'];
+    if (language.startsWith("zh") && obj["zh"]) return obj["zh"];
+    return obj["en"] || "";
   };
 
   const goPurchase = (reason: PurchaseReason, redirectTo?: string) => {
@@ -285,8 +288,6 @@ export default function LoginScreen() {
       }
 
       setIsLoggedIn(true);
-
-      // ✅ 로그인 성공 후 정책 처리
       await handleLoginSuccess(response.data);
 
     } catch (error: any) {
@@ -302,8 +303,11 @@ export default function LoginScreen() {
         return;
       }
 
-      if (!msg) msg = t.tryAgain;
-      Alert.alert(t.loginFailed, msg);
+      if (!msg) msg = typeof t.tryAgain === 'string' ? t.tryAgain : getLocalized(t.tryAgain);
+      Alert.alert(
+         typeof t.loginFailed === 'string' ? t.loginFailed : getLocalized(t.loginFailed),
+         msg
+      );
     } finally {
       setIsLoading(false);
     }
@@ -390,41 +394,21 @@ export default function LoginScreen() {
   const goToLanguage = () => router.push('/language');
 
   // ✅ 매뉴얼 (Video: 서버 URL 사용)
-const manuals: Record<string, { uri: string }> = {
-  ko: { uri: "https://samspeakgo.com/assets/manual_ko.pdf" },
-  en: { uri: "https://samspeakgo.com/assets/manual_en.pdf" },
-  zh: { uri: "https://samspeakgo.com/assets/manual_zh.pdf" },
-  ja: { uri: "https://samspeakgo.com/assets/manual_ja.pdf" },
-  vi: { uri: "https://samspeakgo.com/assets/manual_vi.pdf" },
-};
-
-const openPdfManual = () => {
-  const manual = manuals[language];
-  if (manual) {
-    Linking.openURL(manual.uri);
-  } else {
-    Alert.alert("Error", "Manual not available in this language");
-  }
-};
-
-  const openVideoManual = () => {
-    setManualType("video");
-    setManualVisible(true);
+  const manuals: Record<string, { uri: string }> = {
+    ko: { uri: "https://samspeakgo.com/assets/manual_ko.pdf" },
+    en: { uri: "https://samspeakgo.com/assets/manual_en.pdf" },
+    zh: { uri: "https://samspeakgo.com/assets/manual_zh.pdf" },
+    ja: { uri: "https://samspeakgo.com/assets/manual_ja.pdf" },
+    vi: { uri: "https://samspeakgo.com/assets/manual_vi.pdf" },
   };
 
-  const getCloseText = () => {
-    switch (language) {
-      case "ko":
-        return "닫기";
-      case "zh":
-        return "关闭";
-      case "ja":
-        return "閉じる";
-      case "vi":
-        return "Đóng";
-      default:
-        return "Close";
-    }
+  const openPdfManual = () => {
+    const manual = manuals[language];
+    if (manual) {
+      Linking.openURL(manual.uri);
+    } else {
+      Alert.alert("Error", "Manual not available in this language");
+   }
   };
 
   return (
@@ -436,7 +420,7 @@ const openPdfManual = () => {
 
       <TextInput
         style={styles.input}
-        placeholder={t.enterId}
+        placeholder={typeof t.enterId === 'string' ? t.enterId : getLocalized(t.enterId)}
         placeholderTextColor="#999"
         value={userId}
         onChangeText={(text) => {
@@ -455,11 +439,19 @@ const openPdfManual = () => {
 
       {isLoggedIn ? (
         <TouchableOpacity style={[styles.loginButton, { backgroundColor: 'red' }]} onPress={handleLogout}>
-          <Text style={styles.loginButtonText}>{t.logout || '로그아웃'}</Text>
+          <Text style={styles.loginButtonText}>
+            {typeof t.logout === 'string' ? t.logout : getLocalized(t.logout) || '로그아웃'}
+          </Text>
         </TouchableOpacity>
       ) : (
         <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={isLoading}>
-          {isLoading ? <ActivityIndicator color="white" /> : <Text style={styles.loginButtonText}>{t.login}</Text>}
+          {isLoading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={styles.loginButtonText}>
+               {typeof t.login === 'string' ? t.login : getLocalized(t.login)}
+            </Text>
+          )}
         </TouchableOpacity>
       )}
 
@@ -468,59 +460,30 @@ const openPdfManual = () => {
           {rememberMe && <Text style={{ color: '#007AFF', fontWeight: 'bold' }}>✔</Text>}
         </TouchableOpacity>
         <Text onPress={() => setRememberMe(!rememberMe)} style={styles.checkboxLabel}>
-          {t.rememberId || '아이디 기억하기'}
+           {typeof t.rememberId === 'string'
+              ? t.rememberId
+              : getLocalized(t.rememberId) || '아이디 기억하기'}
         </Text>
       </View>
 
       {/* pdf 버튼 */}
-      <TouchableOpacity
-        style={styles.manualButton}
-        onPress={openPdfManual}
-      >
-        <Text style={styles.manualButtonText}>
-           {getLocalized(localizedText.videoManual).replace("Video", "PDF")}
-        </Text>
+      <TouchableOpacity style={styles.manualButton} onPress={openPdfManual}>
+        <Text style={styles.manualButtonText}>{getLocalized(localizedText.videoManual)}</Text>
       </TouchableOpacity>
-
-
-      {/* 동영상 모달 */}
-      <Modal
-        visible={manualVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setManualVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          {manualType === "video" && (
-            <Video
-              source={manuals[language]} 
-              style={styles.video}
-              useNativeControls
-              resizeMode="contain"
-              shouldPlay
-            />
-          )}
-
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => setManualVisible(false)}
-          >
-            <Text style={{ color: "white", fontWeight: "bold" }}>
-              {getCloseText()}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
 
       {/* 고객센터 */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t.dashboard.support}</Text>
-        <TouchableOpacity
-          onPress={() => Linking.openURL("mailto:bruste68@gmail.com")}
-        >
-          <Text style={styles.link}>{t.dashboard.emailSupport}</Text>
+        <Text style={styles.sectionTitle}>
+          {dash ? getLocalized(dash.support) : ""}
+        </Text>
+        <TouchableOpacity onPress={() => Linking.openURL("mailto:bruste68@gmail.com")}>          
+          <Text style={styles.link}>
+             {dash ? getLocalized(dash.emailSupport) : "Email support"}
+          </Text>
         </TouchableOpacity>
-        <Text style={styles.footerText}>{t.dashboard.voice}</Text>
+        <Text style={styles.footerText}>
+          {dash ? getLocalized(dash.voice) : ""}
+        </Text>
       </View>
     </View>
   );

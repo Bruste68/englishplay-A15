@@ -50,7 +50,7 @@ export default ({ config }) => {
     name: 'SamSpeakEn',
     slug: 'englishplay-ondevice',
     scheme: 'englishplayondevice',
-    version: "10.0.8",   // versionName
+    version: "10.0.9",   // versionName
     orientation: 'portrait',
     icon: './assets/icon.png',
 
@@ -69,7 +69,7 @@ export default ({ config }) => {
     assetBundlePatterns: ['**/*'],
 
     android: {
-      versionCode: 108,
+      versionCode: 109,
       package: 'com.bruste68.englishplayondevice.play',
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
@@ -91,7 +91,7 @@ export default ({ config }) => {
         projectId: '3c63c36b-05ee-41fb-aa8e-1d8c56077f3b'
       },
       ENV,
-      API_BASE_URL: process.env.EXPO_PUBLIC_BACKEND_URL || "https://samspeakgo.com",
+      API_BASE_URL: process.env.EXPO_PUBLIC_BACKEND_URL || "https://samspeakgo.com/api",
       EXPO_PUBLIC_WHISPER_URL: process.env.EXPO_PUBLIC_WHISPER_URL || "https://samspeakgo.com/api",
       EXPO_PUBLIC_REGION: process.env.EXPO_PUBLIC_REGION,
       EXPO_PUBLIC_APP_NAME: process.env.EXPO_PUBLIC_APP_NAME,

@@ -42,14 +42,16 @@ function getDeviceLang() {
   return "en";
 }
 
+type LangCode = keyof typeof translations;
+
 export default function MyOverlay() {
   const { myVisible, closeMy } = useOverlay();
   const router = useRouter();
   const slide = useRef(new Animated.Value(H)).current;
 
   // ✅ 기기 언어 상태
-  const [lang, setLang] = useState(getDeviceLang());
-  const t = translations[lang] || translations.en;
+  const [lang, setLang] = useState<LangCode>(getDeviceLang() as LangCode);
+  const t = translations[lang] ?? translations.en;
 
   useEffect(() => {
     // 기기 언어 변경 시 반영

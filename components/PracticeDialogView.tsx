@@ -9,7 +9,7 @@ import {
   Alert,
   Image,
   DeviceEventEmitter, // 🔵 추가
-  AppState, AppStateStatus,
+  AppState, AppStateStatus, FlatList,
 } from 'react-native';
 import { styles as baseStyles } from '../shared/styles/ChatScreen.styles';
 import { router } from 'expo-router';
@@ -20,8 +20,6 @@ import { useVoice } from '../hooks/useVoice';
 import { useLanguage } from '../hooks/useLanguage';
 import { startProgress } from '../hooks/useProgress';
 import { speakText } from '../utils/speak'; 
-import { ResumeDialog } from './ResumeDialog'; // ✅ 새로 추가
-
 
 LogBox.ignoreLogs(['new NativeEventEmitter', 'Setting a timer']);
 
@@ -47,7 +45,7 @@ interface PracticeDialogViewProps {
   isMemorizationMode: boolean;
   setIsMemorizationMode: (mode: boolean) => void;
   startAutoRecording?: (duration?: number) => Promise<void>;
-  flatListRef?: React.RefObject<ScrollView | null>;
+  flatListRef?: React.RefObject<FlatList<any> | ScrollView | null>;
   onPracticeEnd?: () => void;
   setHasStartedPractice?: (started: boolean) => void;
   hasStartedPractice?: boolean;
@@ -62,7 +60,11 @@ const DEFAULT_STATE = {
   loadingSummary: false,
 };
 
-export const PracticeDialogView = forwardRef((props, ref) => {
+function PracticeDialogViewInner(
+  props: PracticeDialogViewProps,
+  ref: React.Ref<PracticeDialogViewHandle>
+) {
+
   const {
     topicKey,
     currentLevel,
@@ -109,170 +111,74 @@ export const PracticeDialogView = forwardRef((props, ref) => {
   const memorizationScrollRef = useRef<ScrollView | null>(null);
   const [selectedLevel, setSelectedLevel] = useState<LevelType | null>(null);
   const hasEndedRef = useRef(false);
-  const [showResumeDialog, setShowResumeDialog] = useState(false);
   useImperativeHandle(ref, () => ({ resetAllStates }));
 
-  const lastResumeHandledTimeRef = useRef<number>(0);
-  const lastPauseHandledTimeRef = useRef<number>(0);
-  const lastBackgroundTimeRef = useRef<number | null>(null);
-  const isResumingRef = useRef(false);
-  const modeSwitchingRef = useRef(false); 
-
+  const lastSceneRef = useRef<string | null>(null);
   const currentScene = useMemo(() => scenes?.[sceneIndex], [scenes, sceneIndex]);
+
+  // 현재 씬 변경될 때마다 캐싱
+  useEffect(() => {
+    if (currentScene?.code) {
+      lastSceneRef.current = currentScene.code;
+    }
+  }, [currentScene?.code]);
 
   // ✅ 공통 초기화 함수
   const resetAllStates = async () => {
     try {
       stopAllRecordingLogic();
-      practice?.setDialogState?.({ ...DEFAULT_STATE, isActive: false, isPaused: true });
       stopAll();
-      if (Speech && typeof Speech.stop === 'function') await Speech.stop();
 
       if (isRecording) {
         console.log('🛑 [뒤로가기] 녹음 중 → 중단');
         try {
           await stopRecording();
+          await new Promise(res => setTimeout(res, 200));
         } catch (err) {
           console.warn('⚠️ stopRecording 중복 호출 무시:', (err as any)?.message || err);
         }
       }
-      abortWhisper?.();
+
+      // 🔹 3️⃣ Whisper 업로드 중단 (녹음 완료 이후에만)
+      try {
+        abortWhisper?.();
+        await new Promise(res => setTimeout(res, 100)); // Whisper 큐 정리 대기
+      } catch {}
+
+      // 🔹 4️⃣ 오디오 세션 완전 초기화
+      try {
+        const { Audio } = await import('expo-av');
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: false,
+          shouldDuckAndroid: true,
+          staysActiveInBackground: false,
+        });
+        console.log('✅ [RESET] Audio session cleared');
+      } catch (err) {
+        console.warn('⚠️ [RESET] Audio session clear failed:', err);
+      }
+
+      // 🔹 5️⃣ 상태 초기화 및 메시지 정리
       clearTranscript();
+      stopAllRecordingLogic?.();
+      stopAll?.();
 
       if (practiceMode && messages.length > 0 && typeof onPracticeEnd === 'function') {
         console.log('📩 [FEEDBACK] Triggering feedback generation');
         onPracticeEnd();
       }
 
-      practice?.setDialogState?.({ ...DEFAULT_STATE });
+      practice?.setDialogState?.({ ...DEFAULT_STATE, isActive: false, isPaused: true });
+
       setShowFullScript(true);
       setIsMemorizationMode(false);
 
-      setTimeout(() => {
-        if (practiceMode) practice?.togglePracticeMode?.();
-      }, 200);
+      console.log('✅ [RESET] PracticeDialogView fully cleared');
     } catch (error) {
       console.error('Error in resetAllStates:', error);
     }
   };
-
-  // ✅ AppState + Native 이벤트 감지 (백그라운드/복귀)
-  useEffect(() => {
-    const dialogRef = { current: dialogState };
-    let armTimer: NodeJS.Timeout | null = null;
-
-    const pauseNow = () => {
-      const now = Date.now();
-      if (now - lastPauseHandledTimeRef.current < PAUSE_DEBOUNCE_MS) {
-        console.log('⚠️ [PAUSE] 중복 감지 → 무시');
-        return;
-      }
-      lastPauseHandledTimeRef.current = now;
-
-      console.log('🔴 [PAUSE] 확정 → 녹음/음성 정지 + isPaused=true');
-
-      // ✅ Whisper 완전 중단 플래그 설정
-      practice?.setWhisperAborted?.(true);
-      stopAllRecordingLogic?.();
-      stopAll?.();
-      try { Speech.stop(); } catch {}
-
-      // ✅ Whisper 중단 호출 (비동기이지만 즉시 반환됨)
-      abortWhisper?.();
-      // ✅ 내부 상태 플래그 포함하여 안전하게 pause
-      if (practice?.pauseForUserAck) {
-        practice.pauseForUserAck();
-      } else {
-         if (practice?.pauseForUserAck) {
-           practice.pauseForUserAck(); // 내부에서 bumpRun() 수행
-         } else {
-          practice?.setDialogState?.({ ...dialogRef.current, isPaused: true });
-           practice?.setResumeGuard?.(true);
-           practice?.setWhisperAborted?.(true);
-           // View에서만 멈춘 경우도 runId를 올려 예약 무효화
-           if (typeof (practice as any)?.__bumpRun === 'function') (practice as any).__bumpRun();
-      }
-    };
-
-    const handlePauseArmed = () => {
-      // 백그라운드 진입 즉시 pause하지 않고 약간 지연 → 깜빡임 방지
-      if (armTimer) clearTimeout(armTimer);
-      armTimer = setTimeout(() => {
-        pauseNow();
-      }, PAUSE_ARM_MS);
-    };
-
-    const handleResume = (source: 'native' | 'appstate') => {
-      const now = Date.now();
-      const bgAt = lastBackgroundTimeRef.current;
-      const wasRealBackground = bgAt !== null && now - bgAt >= REAL_BG_MS;
-
-      if (modeSwitchingRef.current) {
-        console.log('🟨 [GUARD] Ignore resume during mode switch');
-        return;
-      }
-
-      if (!wasRealBackground) return;
-
-      if (now - lastResumeHandledTimeRef.current < RESUME_DEBOUNCE_MS) return;
-      lastResumeHandledTimeRef.current = now;
-
-      console.log(`🟢 [RESUME:${source}] 실BG 확인 → 복귀 팝업 표시`);
-
-      // ✅ 복귀 시작 플래그 ON (자동재개 차단)
-      isResumingRef.current = true;
-
-      // ✅ 팝업 떠 있는 동안 자동 재개 금지
-      practice?.setResumeGuard?.(true);   // 🔹 추가
-
-      if (!practice?.dialogState?.isPaused) {
-        pauseNow();
-      }
-
-      setShowResumeDialog(true);
-      lastBackgroundTimeRef.current = null;
-    };
-
-    const handleAppStateChange = (nextState: AppStateStatus) => {
-      console.log('📱 [APPSTATE CHANGE]', nextState);
-
-      if (modeSwitchingRef.current) {
-        console.log('🟨 [GUARD] Ignore resume during mode switch');
-        return;
-      }
-
-      if (nextState === 'background') {
-        lastBackgroundTimeRef.current = Date.now();
-        console.log('📴 [APPSTATE] 백그라운드 진입 기록');
-        handlePauseArmed(); // 약간 지연 후 pause (깜빡임 방지)
-      } else if (nextState === 'active') {
-        if (armTimer) { clearTimeout(armTimer); armTimer = null; }
-        console.log('🔙 [APPSTATE] active → resume 판정');
-        handleResume('appstate');
-      }
-    };
-
-    // JS AppState 구독
-    const subAppState = AppState.addEventListener('change', handleAppStateChange);
-
-    // 네이티브 브리지 이벤트도 동일 게이트로 처리
-    const subNativePause = DeviceEventEmitter.addListener('AppPaused', () => {
-      // 혹시 네이티브만 먼저 온 경우를 대비해 타임스탬프 보정
-      if (!lastBackgroundTimeRef.current) lastBackgroundTimeRef.current = Date.now();
-      handlePauseArmed();
-    });
-    const subNativeResume = DeviceEventEmitter.addListener('AppResumed', () => {
-      handleResume('native');
-    });
-
-    return () => {
-      if (armTimer) clearTimeout(armTimer);
-      subAppState.remove();
-      subNativePause.remove();
-      subNativeResume.remove();
-    };
-  }, [dialogState, practice, stopAllRecordingLogic, stopAll]);
-
 
   // ✅ 대본 끝 감지 (practice/scenes 준비되지 않으면 동작 안 함)
   useEffect(() => {
@@ -362,6 +268,43 @@ export const PracticeDialogView = forwardRef((props, ref) => {
     }
   };
 
+  const handleRoleReverse = async () => {
+    console.log("🔄 [ROLE] Role reversed:", !isRoleReversed);
+
+    try {
+      // 🔒 기존 녹음 세션 완전 종료
+      await stopRecording();
+      await new Promise(r => setTimeout(r, 150));
+      stopAllRecordingLogic?.();
+      abortWhisper?.();
+      clearTranscript();
+
+      // 🧠 상태 초기화
+      practice?.setDialogState?.(prev => ({
+        ...DEFAULT_STATE,
+        isActive: true,
+        isPaused: true,
+        isSpeaking: false,
+        isUserTurn: !prev.isUserTurn, 
+      }));
+
+      // 🔄 역할 반전 수행
+      toggleRole();
+
+      // 🎤 오디오 세션 재초기화
+      const { Audio } = await import("expo-av");
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        staysActiveInBackground: false,
+      });
+
+      console.log("✅ [ROLE RESET] Audio session fully reinitialized");
+    } catch (err) {
+      console.warn("⚠️ [ROLE] Role reverse error:", err);
+    }
+  };
 
   const getSceneTitle = () => {
     const desc = currentScene?.description;
@@ -370,28 +313,27 @@ export const PracticeDialogView = forwardRef((props, ref) => {
     return desc;
   };
 
-  const handleStartMemorization = () => {
+  const handleStartMemorization = async () => {
     if (!practice) return;
 
     const prevState = practice?.dialogState ?? DEFAULT_STATE; 
     const userTurnNow = !!(practice?.dialogState?.isUserTurn);
-    console.log('[START MEMO]', {
-      isRoleReversed,
-      practiceMode,
-      step: prevState.step,
-      userTurnNow,
-    });
 
     try { Speech.stop(); } catch {}
 
-    // ✅ 사용자 턴일 때 Whisper abort 생략 (무음 방지)
-    if (!userTurnNow) {
-      stopAllRecordingLogic?.();   // 내부에서 stopRecording 호출 → 서버 업로드 전 로컬만 정리
-      stopAll?.();                 // (만약 내부에서 다시 stopRecording 호출한다면 제거해도 무방)
-      abortWhisper?.();
-      clearTranscript();
-    } else {
-      console.log('🧠 [MEMO MODE] User turn active → skip Whisper abort');
+   // ✅ Whisper / 녹음 / 업로드 완전 정리 (순서 중요)
+    try {
+      if (!userTurnNow) {
+        await stopRecording(); // 중복 무시
+        await new Promise(res => setTimeout(res, 150)); // 잠깐 딜레이
+        abortWhisper?.(); // 서버 업로드 중단
+        stopAllRecordingLogic?.(); // 내부 로직 정리
+        clearTranscript();
+      } else {
+        console.log('🧠 [MEMO MODE] User turn active → skip Whisper abort');
+      }
+    } catch (e) {
+     console.warn('⚠️ cleanup error before memo:', e);
     }
 
     // 🔁 항상 완전 초기화 후 모드 진입
@@ -412,95 +354,82 @@ export const PracticeDialogView = forwardRef((props, ref) => {
 
     // ✅ 연습 모드가 꺼져 있으면 강제 ON
     if (!practice?.practiceMode) {
-      console.log('🔄 [MODE FIX] Enabling practice mode before memorization');
       practice?.togglePracticeMode?.();
     }
-
-    // ✅ practiceMode 강제 ON (직접 암기 진입 대비)
-  //  if (!practice?.practiceMode) {
-  //    practice?.togglePracticeMode?.();
-   // }
 
     // ✅ 처음 시작 기록
     if (!hasStartedPractice) {
       setHasStartedPractice?.(true);
-      startProgress(topicKey, currentScene?.code ?? null, currentLevel);
+      startProgress(topicKey, currentScene?.code ?? lastSceneRef.current ?? "unknown", currentLevel);
+
+    }
+
+    // ✅ 사용자 턴이면 자동 녹음 시작하지 않음 (무음 팝업 방지)
+    if (userTurnNow) {
+      console.log('🚫 [SKIP AUTO] User turn active → skip auto recording');
+      return; // 🔥 여기서 끝! 녹음/대화 자동 시작 없음
     }
 
     // ✅ 첫 진입 시 첫 대사 강제 트리거 (중복 방지 플래그)
     setTimeout(() => {
       const st = practice?.dialogState ?? baseState;
 
-      if (st.step === 0 && !userTurnNow) {
-        console.log('🚀 [MEMO FIX] Direct memorization start → trigger first AI line');
-        const initState = {
-          ...baseState,
-          isActive: true,
-          isPaused: false,
-          isUserTurn: false,
-        };
-        practice?.setDialogState?.(initState);
-        practice?.processDialogWithState?.(initState);
+      // 🔁 일반 상황 (중간 단계에서 암기모드 진입)
+      if (!st.isActive || st.isPaused) {
+        console.log('⚠️ [MEMO SAFE START] skipped due to unstable state');
         return;
       }
-
-      // 🔁 일반 상황 (중간 단계에서 암기모드 진입)
-      if (st.isActive && !st.isPaused && !st.isSpeaking) {
-        console.log('▶️ [MEMO RESUME] Continue dialog flow');
+       console.log('🚀 [MEMO SAFE START] trigger first AI line safely');
         practice?.processDialogWithState?.(st);
-      }
-    }, 300);
+    }, 500);
   };
 
   const handleBackToNormalMode = async () => {
     console.log('[BACK NORMAL] Returning to script mode');
 
-    // 🔒 UI 전환 가드 켜기 → AppState pop-up/자동재개 차단
-    modeSwitchingRef.current = true;
-    practice?.setResumeGuard?.(true);
-    practice?.setWhisperAborted?.(true); // Whisper 업로드 완전 차단
+    // 🔒 모드 전환 중임을 알림 (AI 루프 차단)
+    practice?.modeTransitioningRef && (practice.modeTransitioningRef.current = true);
 
     try {
-      // 모든 오디오/Whisper 활동 안전 정지 (업로드 금지 상태에서)
-      stopAllRecordingLogic();
-      stopAll();
-      try { await Speech.stop(); } catch {}
+      // 1️⃣ Whisper 업로드 및 녹음 완전 중단
+      await new Promise(async (resolve) => {
+        try {
+          await stopRecording();
+        } catch {}
+        await new Promise(r => setTimeout(r, 150));
+        stopAllRecordingLogic?.();
+        abortWhisper?.();
+        await Speech.stop();
+        clearTranscript();
+        resolve(null);
+      });
 
-      abortWhisper?.();   // 서버 업로드 abort
-      clearTranscript();  // 로컬 텍스트 초기화
-
+      // 2️⃣ UI 상태 복원
       setShowFullScript(true);
       setIsMemorizationMode(false);
 
-      // 현재 턴 유지하되, AI 턴이면 이어서 대사 실행 / 사용자 턴이면 대기
-      const prev = practice?.dialogState ?? DEFAULT_STATE;
       const preserved = {
-        ...DEFAULT_STATE,
-        step: prev.step ?? 0,
+        ...(practice?.dialogState ?? DEFAULT_STATE),
         isActive: true,
         isPaused: false,
         isSpeaking: false,
-        isUserTurn: prev.isUserTurn ?? false,
+        isUserTurn: practice?.dialogState?.isUserTurn ?? false,
       };
 
-      // 상태 반영
+      // 3️⃣ 잠시 대기 후 dialogState 복구
       setTimeout(() => {
         practice?.setDialogState?.(preserved);
-
-        // 👉 AI 차례였다면 바로 다음 대사 실행 (Whisper는 금지 상태)
-        if (preserved.isActive && !preserved.isPaused && preserved.isUserTurn === false) {
-          console.log('🟦 [BACK NORMAL] AI turn → continue speaking');
-          practice?.processDialogWithState?.(preserved);
-        }
-      }, 120);
+        console.log('✅ [MODE] Script mode resumed (reset done)');
+      }, 200);
+    } catch (err) {
+      console.error('❌ [BACK NORMAL ERROR]', err);
     } finally {
-      // 잠깐의 전환 시간 이후 가드 해제
+      // 4️⃣ 모드 전환 완료 → 루프 다시 허용
       setTimeout(() => {
-        practice?.setResumeGuard?.(false);
-        practice?.setWhisperAborted?.(false);
-        modeSwitchingRef.current = false;
-      }, 800);
-      console.log('✅ [MODE] Script mode resumed (guards released)');
+        if (practice?.modeTransitioningRef) {
+          practice.modeTransitioningRef.current = false;
+        }
+      }, 300);
     }
   };
 
@@ -521,7 +450,10 @@ export const PracticeDialogView = forwardRef((props, ref) => {
         <View style={[baseStyles.bubble, isUser ? baseStyles.userBubble : baseStyles.aiBubble]}>
           <Text style={baseStyles.messageText}>{item.text}</Text>
           <Text style={baseStyles.timeText}>
-            {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {new Date(item.timestamp ?? Date.now()).toLocaleTimeString([], {
+               hour: '2-digit',
+               minute: '2-digit',
+            })}
           </Text>
         </View>
       </View>
@@ -735,10 +667,9 @@ export const PracticeDialogView = forwardRef((props, ref) => {
         ]}
         onPress={() => {
           if (showFullScript) {
-            // 대본 → 암기
-            handleStartMemorization(); // 내부에서 setShowFullScript(false)와 안전 정리 수행
+           // handleStartMemorization(); // 내부에서 setShowFullScript(false)와 안전 정리 수행
+            if (showFullScript) handleStartMemorization();
           } else {
-            // 암기 → 대본
             handleBackToNormalMode(); // 내부에서 setShowFullScript(true)와 안전 정리 수행
           }
         }}
@@ -776,7 +707,11 @@ export const PracticeDialogView = forwardRef((props, ref) => {
                   (item) =>
                     item && item.text && (item.role === 'user' || item.role === 'ai' || item.role === 'system'),
                 )
-                .map((item, index) => renderMessage({ item }))}
+                .map((item, index) => (
+                  <View key={`${item.step ?? index}-${index}`}>
+                      {renderMessage({ item })}
+                  </View>
+                ))}
             </ScrollView>
           )}
       </View>
@@ -784,7 +719,7 @@ export const PracticeDialogView = forwardRef((props, ref) => {
       <View style={styles.fixedControls}>
         {practiceMode || isMemorizationMode ? (
           <>
-            <View className="buttonWrapper" style={styles.buttonWrapper}>
+            <View style={styles.buttonWrapper}>
               <TouchableOpacity
                 onPress={isRecording ? stopRecording : startRecording}
                 disabled={!dialogState.isUserTurn || dialogState.isSpeaking}
@@ -865,7 +800,12 @@ export const PracticeDialogView = forwardRef((props, ref) => {
  
                     // ✅ 학습 시작 기록
                     setHasStartedPractice?.(true);
-                    startProgress(topicKey, currentScene?.code ?? null, currentLevel);
+                    startProgress(
+                      topicKey,
+                      currentScene?.code ?? lastSceneRef.current ?? null,
+                      currentLevel
+                    );
+
 
                     // ✅ 시작 턴이 사용자면 녹음부터 시작
                     if (startAsUser) {
@@ -894,12 +834,12 @@ export const PracticeDialogView = forwardRef((props, ref) => {
             </View>
             <View style={styles.buttonWrapper}>
               <TouchableOpacity
-                onPress={() => {
+                onPress={async () => {
                   if (dialogState.isSpeaking) {
                     Alert.alert('Wait a minute!', 'Role change is not possible during audio output at this time.');
                     return;
                   }
-                  toggleRole();
+                  await handleRoleReverse();
                 }}
                 disabled={dialogState.isSpeaking}
               >
@@ -912,19 +852,9 @@ export const PracticeDialogView = forwardRef((props, ref) => {
           </>
         )}
       </View>
-      {/* ✅ 복귀 팝업 */}
-      <ResumeDialog
-        visible={showResumeDialog}
-        onContinue={() => {
-          setShowResumeDialog(false);
-          console.log('▶️ [RESUME POPUP] Continue pressed');
-          practice?.setResumeGuard?.(false);
-            practice.resumeAfterUserAck?.();
-        }}
-      />
     </View>
   );
-});
+}
 
 const levelStyles = StyleSheet.create({
   levelContainer: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginVertical: 8 },
@@ -998,6 +928,4 @@ const styles = StyleSheet.create({
   buttonWrapper: { flex: 1, marginHorizontal: 4 },
 });
 
-}) as React.ForwardRefExoticComponent<
-  PracticeDialogViewProps & React.RefAttributes<PracticeDialogViewHandle>
->;
+export const PracticeDialogView = forwardRef(PracticeDialogViewInner);

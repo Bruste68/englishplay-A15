@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 export type Message = {
@@ -6,7 +5,7 @@ export type Message = {
   role: 'user' | 'ai'; // sender -> role로 변경
   text: string;
   timestamp: number;
-  scene?: number; // 추가
+  scene?: string; // 추가
   step?: number; // 추가
   metadata?: {
     isTemplate?: boolean;
@@ -21,10 +20,17 @@ type TemplateProgress = {
   completed: boolean;
 };
 
+// ✅ extra 포함 확장 메타데이터 타입
+type AddMessageMeta =
+  (Message['metadata'] & {
+    isTemplate?: boolean;
+    extra?: { step?: number; scene?: string; timestamp?: number };
+  }) | undefined;
+
 type ChatHistoryContextType = {
   messagesByTopic: Record<string, Message[]>;
   templateProgressByTopic: Record<string, TemplateProgress>;
-  addMessage: (topic: string, sender: 'user' | 'ai', text: string, metadata?: Message['metadata']) => void;
+  addMessage: (topic: string, sender: 'user' | 'ai', text: string, metadata?: AddMessageMeta) => void; // ✅ 수정 완료
   addTemplateMessage: (topic: string, message: Message) => void;
   clearMessages: (topic: string, keepStructure?: boolean) => void;
 };
@@ -36,25 +42,33 @@ export const PersistentChatHistoryProvider = ({ children }: { children: ReactNod
   const [templateProgressByTopic, setTemplateProgressByTopic] = useState<Record<string, TemplateProgress>>({});
 
   const addMessage = (
-     topic: string,
-     sender: 'user' | 'ai',
-     text: string,
-     metadata?: Message['metadata'],
-     userMessage?: boolean
+    topic: string,
+    sender: 'user' | 'ai',
+    text: string,
+    metadata?: AddMessageMeta,
+    userMessage?: boolean
   ) => {
-     const id = Date.now().toString();
-     const newMessage: Message = {
-       id,
-       role: sender,
-       text,
-       timestamp: Date.now(),
-       metadata,
-     };
+    const id = Date.now().toString();
+    const newMessage: Message = {
+      id,
+      role: sender,
+      text,
+      timestamp: metadata?.extra?.timestamp ?? Date.now(),
+      step: metadata?.extra?.step,
+      scene: metadata?.extra?.scene,
+      metadata: {
+        ...metadata,
+        isTemplate: metadata?.isTemplate,
+        audioFile: metadata?.audioFile,
+        confidence: metadata?.confidence,
+      },
+    };
 
-     setMessagesByTopic((prev) => {
-       const currentMessages = prev[topic] || [];
-       return { ...prev, [topic]: [...currentMessages, newMessage] };
-     });
+    setMessagesByTopic((prev) => {
+      const safePrev = prev ?? {};
+      const currentMessages = safePrev[topic] ?? [];
+      return { ...safePrev, [topic]: [...currentMessages, newMessage] };
+    });
   };
 
   const addTemplateMessage = (topic: string, message: Message) => {
@@ -108,5 +122,5 @@ export const usePersistentChatHistory = (): ChatHistoryContextType => {
   if (!context) {
     throw new Error('usePersistentChatHistory must be used within a Provider');
   }
-  return context; // ✅ 전체 반환!
+  return context;
 };

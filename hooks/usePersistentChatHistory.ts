@@ -1,12 +1,6 @@
-
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-type Message = {
-  id: string;
-  sender: 'user' | 'ai';
-  text: string;
-};
+import type { Message } from '../types'; // ✅ types.ts 연결
 
 export function usePersistentChatHistory() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -40,12 +34,29 @@ export function usePersistentChatHistory() {
     }
   };
 
-  const addMessage = (sender: 'user' | 'ai', text: string) => {
-    const newMessage = {
+  /**
+   * ✅ addMessage 개선
+   * - topicKey: 대화 주제
+   * - sender: 'user' | 'ai'
+   * - text: 메시지 내용
+   * - metadata: audioFile, isTemplate, extra 등
+   */
+  const addMessage = (
+    topicKey: string,
+    sender: 'user' | 'ai',
+    text: string,
+    metadata?: Message['metadata'] & {
+      isTemplate?: boolean;
+      extra?: { step?: number; scene?: string; timestamp?: number };
+    }
+  ) => {
+    const newMessage: Message = {
       id: Date.now().toString(),
-      sender,
+      role: sender, // ✅ Message 타입에 맞게 'role' 사용
       text,
+      ...metadata,
     };
+
     setMessages(prev => [...prev, newMessage]);
   };
 

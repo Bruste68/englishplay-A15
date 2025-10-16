@@ -44,10 +44,7 @@ const linking = {
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   return (
-    <ThemeProvider
-      value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
-      linking={linking} // ✅ 딥링크 적용
-    >
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
         {/* (tabs) 그룹이 기본 진입점 */}
         <Stack.Screen name="(tabs)" />

@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import { router } from "expo-router";
 import { API_BASE_URL } from "../../lib/api";
 import { allDialogs } from "../../constants/templateDialogs";
 import { useLanguage } from "../../hooks/useLanguage";
@@ -206,9 +207,9 @@ function getSceneInfo(sceneCode?: string) {
   if (!sceneCode) return null;
 
   for (const topicKey in allDialogs) {
-    const topic = allDialogs[topicKey];
+    const topic = allDialogs[topicKey as keyof typeof allDialogs]; 
     for (const levelKey in topic) {
-      const scenes = topic[levelKey];
+      const scenes = topic[levelKey as keyof typeof topic]; 
       const found = scenes.find((s) => s.code === sceneCode);
       if (found) {
         return {
@@ -302,7 +303,8 @@ function StudyChart({
             padding={{ top: 20, bottom: 50, left: 50, right: 20 }}
           >
             <VictoryAxis
-              tickValues={sliced.map((d) => d[xKey])}
+              tickValues={sliced.map((d: any) => d[xKey])}
+
               tickFormat={(t) => String(t)}
               style={{ tickLabels: { fill: "#333", fontSize: 10 } }}
             />
@@ -366,7 +368,10 @@ function StudyChart({
 }
 
 export default function MyDashboard({ compact = false }: Props) {
-  const { t, language } = useLanguage(); // <- language 함께
+  const { t, language } = useLanguage() as {
+    t: Record<string, any>;
+    language: string;
+  };
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [premiumActive, setPremiumActive] = useState<boolean>(false);
@@ -560,9 +565,7 @@ export default function MyDashboard({ compact = false }: Props) {
           {
             text: "확인",
             onPress: async () => {
-              // 👉 실제 결제 처리 (React Native IAP 연결 시)
-              // router.push("/purchase");  // 이미 purchase.tsx 있을 경우
-              Linking.openURL("https://samspeakgo.com/purchase");
+              router.push("/purchase");  // 이미 purchase.tsx 있을 경우
             },
           },
         ]
@@ -582,7 +585,7 @@ export default function MyDashboard({ compact = false }: Props) {
           {
             text: "확인",
             onPress: async () => {
-              Linking.openURL("https://samspeakgo.com/purchase");
+              router.push("/purchase");
             },
           },
         ]
@@ -763,11 +766,9 @@ export default function MyDashboard({ compact = false }: Props) {
             {t.dashboard.lastStudy}:{" "}
             <Text style={styles.val}>
               {topicLabel(lastStudy.topic_from_scene)} - {levelLabel(lastStudy.level)}{" "}
-              {
-                safeText(lastStudy.scene_title, language) ||
-                safeText(lastStudy.title, language) ||
-                safeText(lastStudy.description, language)
-              }
+              /
+              {" "}
+              {lastStudy?.localized_title || lastStudy?.scene_title}
             </Text>
           </Text>
         ) : (
